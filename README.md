@@ -24,10 +24,3 @@
 docker compose up -d
 
 mvn spring-boot:run
-
----
-
-## 3. Первый релиз
-
-```bash
-git status
