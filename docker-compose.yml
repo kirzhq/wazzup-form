@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: wazzup-postgres
+    environment:
+      POSTGRES_DB: wazzup_contacts
+      POSTGRES_USER: wazzup_user
+      POSTGRES_PASSWORD: wazzup_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - wazzup_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  wazzup_postgres_data:

@@ -1,0 +1,15 @@
+package ru.kirzhq.wazzup.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record RenameContactRequest(
+
+        @NotBlank(message = "Новое имя контакта обязательно")
+        @Size(
+                max = 200,
+                message = "Имя контакта не должно превышать 200 символов"
+        )
+        String name
+) {
+}
