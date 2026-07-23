@@ -1,6 +1,6 @@
-# Wazzup form
+# Wazzup CRM
 
-Задание стажировки Бастион Групп.
+Тестовое задание для стажировки.
 
 ## Backend
 
@@ -24,3 +24,10 @@
 docker compose up -d
 
 mvn spring-boot:run
+
+---
+
+## 3. Первый релиз
+
+```bash
+git status
