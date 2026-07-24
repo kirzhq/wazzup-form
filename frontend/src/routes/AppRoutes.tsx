@@ -1,5 +1,4 @@
 import {
-  Navigate,
   Route,
   Routes,
 } from 'react-router-dom'
@@ -8,6 +7,7 @@ import { ApiKeyPage } from '../pages/ApiKeyPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { LoginPage } from '../pages/LoginPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
+import { StartPage } from '../pages/StartPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export function AppRoutes() {
@@ -15,7 +15,7 @@ export function AppRoutes() {
     <Routes>
       <Route
         path="/"
-        element={<Navigate to="/settings" replace />}
+        element={<StartPage />}
       />
 
       <Route

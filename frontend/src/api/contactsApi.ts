@@ -1,0 +1,72 @@
+import { httpClient } from './httpClient'
+import type { Contact } from '../types/contact'
+
+interface ContactsResponse {
+  count: number
+  data: Contact[]
+}
+
+export interface CreateContactRequest {
+  name: string
+  phone: string
+  responsibleUserId: string
+  chatType: 'whatsapp' | 'telegram' | 'viber' | 'max'
+}
+
+export async function getContacts(
+  search = '',
+): Promise<Contact[]> {
+  const response =
+    await httpClient.get<ContactsResponse>('/contacts', {
+      params: search.trim() ? { search: search.trim() } : undefined,
+    })
+
+  return response.data.data
+}
+
+export async function createContact(
+  request: CreateContactRequest,
+): Promise<Contact> {
+  const response = await httpClient.post<Contact>(
+    '/contacts',
+    request,
+  )
+
+  return response.data
+}
+
+export async function renameContact(
+  contactId: string,
+  name: string,
+): Promise<Contact> {
+  const response = await httpClient.patch<Contact>(
+    `/contacts/${encodeURIComponent(contactId)}/name`,
+    { name },
+  )
+
+  return response.data
+}
+
+export interface UpdateContactRequest {
+  name: string
+  phone: string
+  chatType: CreateContactRequest['chatType']
+}
+
+export async function updateContact(
+  contactId: string,
+  request: UpdateContactRequest,
+): Promise<Contact> {
+  const response = await httpClient.patch<Contact>(
+    `/contacts/${encodeURIComponent(contactId)}`,
+    request,
+  )
+
+  return response.data
+}
+
+export async function deleteContact(contactId: string): Promise<void> {
+  await httpClient.delete(
+    `/contacts/${encodeURIComponent(contactId)}`,
+  )
+}

@@ -5,4 +5,6 @@ import ru.kirzhq.wazzup.entity.AppSettings;
 
 public interface AppSettingsRepository
         extends JpaRepository<AppSettings, Long> {
+
+    java.util.Optional<AppSettings> findFirstByOrderByIdAsc();
 }

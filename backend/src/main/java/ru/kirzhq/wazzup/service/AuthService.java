@@ -6,8 +6,6 @@ import ru.kirzhq.wazzup.client.WazzupApiClient;
 import ru.kirzhq.wazzup.dto.LoginResponse;
 import ru.kirzhq.wazzup.dto.WazzupUser;
 
-import java.util.Arrays;
-
 @Service
 public class AuthService {
 
@@ -28,23 +26,42 @@ public class AuthService {
             );
         }
 
-        WazzupUser user = Arrays.stream(users)
-                .filter(item -> item.phone() != null)
-                .filter(item ->
-                        normalizePhone(item.phone()).equals(normalizedPhone)
-                )
-                .findFirst()
-                .orElseThrow(() ->
-                        new EmployeeNotFoundException(
-                                "Сотрудник с таким номером не найден"
-                        )
-                );
+        WazzupUser user = findUserByPhone(users, normalizedPhone);
 
         return new LoginResponse(
                 user.id(),
                 user.name(),
                 user.phone(),
                 user.accountId()
+        );
+    }
+
+    private WazzupUser findUserByPhone(
+            WazzupUser[] users,
+            String normalizedPhone
+    ) {
+        for (WazzupUser userSummary : users) {
+            if (userSummary == null || userSummary.id() == null) {
+                continue;
+            }
+
+            /*
+             * В некоторых аккаунтах список пользователей уже содержит phone.
+             * По официальному контракту гарантированно он приходит только
+             * из GET /users/{id}, поэтому при необходимости запрашиваем детали.
+             */
+            WazzupUser user = userSummary.phone() == null
+                    ? wazzupApiClient.getUserById(userSummary.id())
+                    : userSummary;
+
+            if (user.phone() != null
+                    && normalizePhone(user.phone()).equals(normalizedPhone)) {
+                return user;
+            }
+        }
+
+        throw new EmployeeNotFoundException(
+                "Сотрудник с таким номером не найден"
         );
     }
 

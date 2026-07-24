@@ -2,7 +2,7 @@ export interface AuthUser {
   id: string
   name: string
   phone: string
-  accountId: number
+  accountId: number | null
 }
 
 export interface LoginRequest {

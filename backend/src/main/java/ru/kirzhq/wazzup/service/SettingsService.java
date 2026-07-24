@@ -16,12 +16,12 @@ public class SettingsService {
 
     @Transactional
     public void saveApiKey(String apiKey) {
-        AppSettings settings = repository.findAll()
-                .stream()
-                .findFirst()
+        String normalizedApiKey = apiKey.trim();
+
+        AppSettings settings = repository.findFirstByOrderByIdAsc()
                 .orElseGet(() -> new AppSettings(apiKey));
 
-        settings.setApiKey(apiKey);
+        settings.setApiKey(normalizedApiKey);
         repository.save(settings);
     }
 
@@ -30,9 +30,7 @@ public class SettingsService {
     }
 
     public String getApiKey() {
-        return repository.findAll()
-                .stream()
-                .findFirst()
+        return repository.findFirstByOrderByIdAsc()
                 .map(AppSettings::getApiKey)
                 .orElseThrow(() ->
                         new IllegalStateException("API-ключ ещё не настроен")

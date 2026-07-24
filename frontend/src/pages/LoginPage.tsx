@@ -14,12 +14,20 @@ import { Button } from '../components/ui/Button/Button'
 import { Card } from '../components/ui/Card/Card'
 import { Input } from '../components/ui/Input/Input'
 import { AuthLayout } from '../layouts/AuthLayout'
-import { saveAuthUser } from '../utils/authStorage'
+import {
+  getLastPhone,
+  saveAuthUser,
+  saveLastPhone,
+} from '../utils/authStorage'
+import {
+  formatPhone,
+  normalizePhone,
+} from '../utils/phone'
 
 export function LoginPage() {
   const navigate = useNavigate()
 
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(() => formatPhone(getLastPhone()))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -28,7 +36,7 @@ export function LoginPage() {
   ) {
     event.preventDefault()
 
-    const normalizedPhone = phone.replace(/\D/g, '')
+    const normalizedPhone = normalizePhone(phone)
 
     if (!normalizedPhone) {
       setErrorMessage('Введите номер телефона')
@@ -48,6 +56,7 @@ export function LoginPage() {
         phone: normalizedPhone,
       })
 
+      saveLastPhone(formatPhone(phone))
       saveAuthUser(user)
       navigate('/contacts', {
         replace: true,
@@ -66,7 +75,22 @@ export function LoginPage() {
 
   return (
     <AuthLayout>
-      <Card>
+      <div className="relative">
+        <Link
+          to="/settings"
+          aria-label="Настройки API-ключа"
+          title="Настройки"
+          className="
+            absolute right-5 top-5 z-10 grid size-10 place-items-center
+            rounded-xl text-xl text-slate-500 transition
+            hover:bg-slate-100 hover:text-violet-600
+            focus:outline-none focus:ring-4 focus:ring-violet-100
+          "
+        >
+          ⚙
+        </Link>
+
+        <Card>
         <header className="mb-8">
           <div
             className="
@@ -103,7 +127,7 @@ export function LoginPage() {
             autoComplete="tel"
             disabled={isSubmitting}
             onChange={(event) => {
-              setPhone(event.target.value)
+              setPhone(formatPhone(event.target.value))
               setErrorMessage('')
             }}
           />
@@ -122,18 +146,9 @@ export function LoginPage() {
             Войти
           </Button>
 
-          <Link
-            to="/settings"
-            className="
-              text-center text-sm font-semibold
-              text-slate-500 transition
-              hover:text-violet-600
-            "
-          >
-            Изменить API-ключ
-          </Link>
         </form>
-      </Card>
+        </Card>
+      </div>
     </AuthLayout>
   )
 }

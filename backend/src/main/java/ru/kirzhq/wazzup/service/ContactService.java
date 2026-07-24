@@ -10,11 +10,13 @@ import ru.kirzhq.wazzup.dto.CreateContactRequest;
 import ru.kirzhq.wazzup.dto.WazzupContact;
 import ru.kirzhq.wazzup.dto.WazzupContactData;
 import ru.kirzhq.wazzup.dto.WazzupContactsResponse;
+import ru.kirzhq.wazzup.dto.UpdateContactRequest;
 import ru.kirzhq.wazzup.exception.WazzupApiException;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -22,6 +24,12 @@ public class ContactService {
     private static final int CONTACT_READ_ATTEMPTS = 3;
     private static final long CONTACT_READ_DELAY_MS = 200;
     private static final int PAGE_SIZE = 100;
+    private static final Set<String> PHONE_CHAT_TYPES = Set.of(
+            "whatsapp",
+            "telegram",
+            "viber",
+            "max"
+    );
 
     /**
      * Защита от бесконечного цикла, если Wazzup начнёт
@@ -63,7 +71,7 @@ public class ContactService {
     }
 
     /**
-     * Создаёт новый WhatsApp-контакт в Wazzup.
+     * Создаёт новый контакт для поддерживаемой телефонной сети в Wazzup.
      */
     public WazzupContact createContact(CreateContactRequest request) {
         String name = request.name().trim();
@@ -123,7 +131,8 @@ public class ContactService {
                 );
             }
 
-            if (response.count() != null) {
+            boolean totalCountKnown = response.count() != null;
+            if (totalCountKnown) {
                 totalCount = response.count();
             }
 
@@ -146,7 +155,7 @@ public class ContactService {
              * Если Wazzup вернул меньше 100 записей,
              * значит это последняя страница.
              */
-            if (page.size() < PAGE_SIZE) {
+            if (!totalCountKnown && page.size() < PAGE_SIZE) {
                 break;
             }
         }
@@ -276,7 +285,8 @@ public class ContactService {
     /**
      * Определяет тип мессенджера.
      *
-     * На текущем этапе добавляем только WhatsApp-контакты.
+     * Поддерживаются сети, в которых контакт можно идентифицировать
+     * по номеру телефона.
      */
     private String normalizeChatType(String chatType) {
         if (!StringUtils.hasText(chatType)) {
@@ -287,9 +297,9 @@ public class ContactService {
                 .trim()
                 .toLowerCase(Locale.ROOT);
 
-        if (!"whatsapp".equals(normalizedChatType)) {
+        if (!PHONE_CHAT_TYPES.contains(normalizedChatType)) {
             throw new IllegalArgumentException(
-                    "Добавление контактов поддерживается только для WhatsApp"
+                    "Поддерживаются WhatsApp, Telegram, Viber и MAX"
             );
         }
 
@@ -303,12 +313,12 @@ public class ContactService {
             String chatType,
             String phone
     ) {
-        return new WazzupContactData(
-                chatType,
-                phone,
-                null,
-                null
-        );
+        String phoneField = "telegram".equals(chatType)
+                || "max".equals(chatType)
+                ? phone
+                : null;
+
+        return new WazzupContactData(chatType, phone, null, phoneField);
     }
 
 
@@ -376,16 +386,48 @@ public class ContactService {
         return updatedContact;
     }
 
+    public void deleteContact(String contactId) {
+        if (!StringUtils.hasText(contactId)) {
+            throw new IllegalArgumentException(
+                    "ID контакта не должен быть пустым"
+            );
+        }
+
+        wazzupApiClient.deleteContact(contactId.trim());
+    }
+
+    public WazzupContact updateContact(
+            String contactId,
+            UpdateContactRequest request
+    ) {
+        if (!StringUtils.hasText(contactId)) {
+            throw new IllegalArgumentException(
+                    "ID контакта не должен быть пустым"
+            );
+        }
+
+        String phone = normalizePhone(request.phone());
+        String chatType = normalizeChatType(request.chatType());
+        validatePhone(phone);
+
+        WazzupContact existingContact = findContactById(contactId.trim());
+        WazzupContact updatedContact = new WazzupContact(
+                existingContact.id(),
+                existingContact.responsibleUserId(),
+                request.name().trim(),
+                List.of(createContactData(chatType, phone)),
+                existingContact.uri()
+        );
+
+        wazzupApiClient.saveContacts(List.of(updatedContact));
+        return updatedContact;
+    }
+
     private WazzupContact findContactById(String contactId) {
-        return getAllContacts()
-                .stream()
-                .filter(contact ->
-                        contact != null
-                                && contactId.equals(contact.id())
-                )
-                .findFirst()
-                .orElseThrow(() ->
-                        new ContactNotFoundException(contactId)
-                );
+        try {
+            return wazzupApiClient.getContactById(contactId);
+        } catch (WazzupApiException exception) {
+            throw new ContactNotFoundException(contactId);
+        }
     }
 }

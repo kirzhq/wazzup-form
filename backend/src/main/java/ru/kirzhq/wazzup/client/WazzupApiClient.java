@@ -44,6 +44,29 @@ public class WazzupApiClient {
         }
     }
 
+    public WazzupUser getUserById(String userId) {
+        try {
+            WazzupUser user = restClient.get()
+                    .uri("/users/{id}", userId)
+                    .header("Authorization", getBearerToken())
+                    .retrieve()
+                    .body(WazzupUser.class);
+
+            if (user == null) {
+                throw new WazzupApiException(
+                        "Wazzup вернул пустой ответ при получении сотрудника"
+                );
+            }
+
+            return user;
+        } catch (RestClientException exception) {
+            throw new WazzupApiException(
+                    "Не удалось получить сотрудника из Wazzup",
+                    exception
+            );
+        }
+    }
+
     public WazzupContactsResponse getContactsPage(int offset) {
         try {
             return restClient.get()
@@ -96,6 +119,21 @@ public class WazzupApiClient {
         } catch (RestClientException exception) {
             throw new WazzupApiException(
                     "Не удалось получить созданный контакт из Wazzup",
+                    exception
+            );
+        }
+    }
+
+    public void deleteContact(String contactId) {
+        try {
+            restClient.delete()
+                    .uri("/contacts/{id}", contactId)
+                    .header("Authorization", getBearerToken())
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException exception) {
+            throw new WazzupApiException(
+                    "Не удалось удалить контакт из Wazzup",
                     exception
             );
         }

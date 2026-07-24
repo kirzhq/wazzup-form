@@ -8,6 +8,17 @@ export interface SaveApiKeyResponse {
   message: string
 }
 
+export interface SettingsStatus {
+  configured: boolean
+}
+
+export async function getSettingsStatus(): Promise<SettingsStatus> {
+  const response =
+    await httpClient.get<SettingsStatus>('/settings')
+
+  return response.data
+}
+
 export async function saveApiKey(
   request: SaveApiKeyRequest,
 ): Promise<SaveApiKeyResponse> {
