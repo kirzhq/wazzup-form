@@ -45,11 +45,7 @@ public class AuthService {
                 continue;
             }
 
-            /*
-             * В некоторых аккаунтах список пользователей уже содержит phone.
-             * По официальному контракту гарантированно он приходит только
-             * из GET /users/{id}, поэтому при необходимости запрашиваем детали.
-             */
+            // В списке пользователей phone может отсутствовать.
             WazzupUser user = userSummary.phone() == null
                     ? wazzupApiClient.getUserById(userSummary.id())
                     : userSummary;

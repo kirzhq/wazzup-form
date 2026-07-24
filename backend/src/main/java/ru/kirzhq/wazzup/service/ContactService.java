@@ -31,10 +31,7 @@ public class ContactService {
             "max"
     );
 
-    /**
-     * Защита от бесконечного цикла, если Wazzup начнёт
-     * возвращать некорректные данные пагинации.
-     */
+    // Ограничение защищает от бесконечного цикла при некорректной пагинации.
     private static final int MAX_PAGES = 10_000;
 
     private final WazzupApiClient wazzupApiClient;
@@ -43,12 +40,6 @@ public class ContactService {
         this.wazzupApiClient = wazzupApiClient;
     }
 
-    /**
-     * Получает полный список контактов.
-     *
-     * Фильтры имени и телефона применяются независимо.
-     * Если заполнены оба, контакт должен соответствовать обоим.
-     */
     public WazzupContactsResponse getContacts(
             String name,
             String phone
@@ -74,9 +65,6 @@ public class ContactService {
         );
     }
 
-    /**
-     * Создаёт новый контакт для поддерживаемой телефонной сети в Wazzup.
-     */
     public WazzupContact createContact(CreateContactRequest request) {
         String name = request.name().trim();
         String phone = normalizePhone(request.phone());
@@ -100,18 +88,11 @@ public class ContactService {
                 null
         );
 
-        /*
-         * Wazzup принимает массив контактов,
-         * поэтому даже один контакт отправляем списком.
-         */
         wazzupApiClient.saveContacts(List.of(contact));
 
         return getCreatedContact(contactId);
     }
 
-    /**
-     * Загружает все страницы контактов из Wazzup.
-     */
     private List<WazzupContact> getAllContacts() {
         List<WazzupContact> contacts = new ArrayList<>();
 
@@ -148,17 +129,9 @@ public class ContactService {
 
             contacts.addAll(page);
 
-            /*
-             * Увеличиваем offset на реальное число записей,
-             * полученное от Wazzup.
-             */
             offset += page.size();
             pageNumber++;
 
-            /*
-             * Если Wazzup вернул меньше 100 записей,
-             * значит это последняя страница.
-             */
             if (!totalCountKnown && page.size() < PAGE_SIZE) {
                 break;
             }
@@ -167,9 +140,6 @@ public class ContactService {
         return contacts;
     }
 
-    /**
-     * Выполняет поиск по имени и телефону.
-     */
     private List<WazzupContact> searchContacts(
             List<WazzupContact> contacts,
             String name,
@@ -192,9 +162,6 @@ public class ContactService {
                 .toList();
     }
 
-    /**
-     * Проверяет совпадение по имени контакта.
-     */
     private boolean matchesName(
             WazzupContact contact,
             String search
@@ -208,12 +175,6 @@ public class ContactService {
                 .contains(search);
     }
 
-    /**
-     * Проверяет совпадение по номеру телефона.
-     *
-     * Номер может находиться как в phone,
-     * так и в chatId.
-     */
     private boolean matchesPhone(
             WazzupContact contact,
             String searchPhone
@@ -241,9 +202,6 @@ public class ContactService {
                 );
     }
 
-    /**
-     * Проверяет, содержит ли номер искомую последовательность цифр.
-     */
     private boolean containsPhone(
             String value,
             String searchPhone
@@ -255,13 +213,6 @@ public class ContactService {
         return normalizePhone(value).contains(searchPhone);
     }
 
-    /**
-     * Нормализует номер телефона.
-     *
-     * Оставляет только цифры.
-     * Российский номер, начинающийся с 8,
-     * преобразует в формат с 7.
-     */
     private String normalizePhone(String value) {
         if (value == null) {
             return "";
@@ -276,9 +227,6 @@ public class ContactService {
         return digits;
     }
 
-    /**
-     * Проверяет длину номера телефона.
-     */
     private void validatePhone(String phone) {
         if (phone.length() < 10 || phone.length() > 15) {
             throw new IllegalArgumentException(
@@ -287,12 +235,6 @@ public class ContactService {
         }
     }
 
-    /**
-     * Определяет тип мессенджера.
-     *
-     * Поддерживаются сети, в которых контакт можно идентифицировать
-     * по номеру телефона.
-     */
     private String normalizeChatType(String chatType) {
         if (!StringUtils.hasText(chatType)) {
             return "whatsapp";
@@ -311,9 +253,6 @@ public class ContactService {
         return normalizedChatType;
     }
 
-    /**
-     * Формирует контактные данные для отправки в Wazzup.
-     */
     private WazzupContactData createContactData(
             String chatType,
             String phone
