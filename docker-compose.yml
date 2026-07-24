@@ -1,32 +1,14 @@
-services:
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-wazzup_contacts}
-      POSTGRES_USER: ${POSTGRES_USER:-wazzup_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wazzup_password}
-    volumes:
-      - wazzup_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
+name: wazzup-contacts
 
+services:
   backend:
     build:
       context: ./backend
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-wazzup_contacts}
-      DB_USERNAME: ${POSTGRES_USER:-wazzup_user}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-wazzup_password}
+      DB_URL: jdbc:sqlite:/data/wazzup.db
       SERVER_PORT: 8080
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - wazzup_sqlite_data:/data
     restart: unless-stopped
 
   frontend:
@@ -39,4 +21,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  wazzup_postgres_data:
+  wazzup_sqlite_data:

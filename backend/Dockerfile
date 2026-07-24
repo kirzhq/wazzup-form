@@ -8,7 +8,10 @@ RUN mvn -B -DskipTests clean package
 
 FROM eclipse-temurin:21-jre-alpine
 
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -g 10001 -S app \
+    && adduser -u 10001 -S app -G app \
+    && mkdir -p /data \
+    && chown app:app /data
 WORKDIR /app
 
 COPY --from=build /app/target/wazzup-backend-*.jar app.jar
