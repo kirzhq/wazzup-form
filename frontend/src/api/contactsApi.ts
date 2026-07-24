@@ -13,12 +13,19 @@ export interface CreateContactRequest {
   chatType: 'whatsapp' | 'telegram' | 'viber' | 'max'
 }
 
+export interface ContactSearch {
+  name?: string
+  phone?: string
+}
+
 export async function getContacts(
-  search = '',
+  search: ContactSearch = {},
 ): Promise<Contact[]> {
+  const name = search.name?.trim()
+  const phone = search.phone?.trim()
   const response =
     await httpClient.get<ContactsResponse>('/contacts', {
-      params: search.trim() ? { search: search.trim() } : undefined,
+      params: name || phone ? { name, phone } : undefined,
     })
 
   return response.data.data

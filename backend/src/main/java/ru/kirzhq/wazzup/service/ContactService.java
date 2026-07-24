@@ -46,13 +46,16 @@ public class ContactService {
     /**
      * Получает полный список контактов.
      *
-     * Если передан параметр search, выполняет поиск
-     * по имени и номеру телефона среди всех контактов.
+     * Фильтры имени и телефона применяются независимо.
+     * Если заполнены оба, контакт должен соответствовать обоим.
      */
-    public WazzupContactsResponse getContacts(String search) {
+    public WazzupContactsResponse getContacts(
+            String name,
+            String phone
+    ) {
         List<WazzupContact> allContacts = getAllContacts();
 
-        if (!StringUtils.hasText(search)) {
+        if (!StringUtils.hasText(name) && !StringUtils.hasText(phone)) {
             return new WazzupContactsResponse(
                     (long) allContacts.size(),
                     allContacts
@@ -61,7 +64,8 @@ public class ContactService {
 
         List<WazzupContact> filteredContacts = searchContacts(
                 allContacts,
-                search
+                name,
+                phone
         );
 
         return new WazzupContactsResponse(
@@ -168,21 +172,22 @@ public class ContactService {
      */
     private List<WazzupContact> searchContacts(
             List<WazzupContact> contacts,
-            String search
+            String name,
+            String phone
     ) {
-        String normalizedText = search
-                .trim()
-                .toLowerCase(Locale.ROOT);
-
-        String normalizedPhone = normalizePhone(search);
+        String normalizedName = StringUtils.hasText(name)
+                ? name.trim().toLowerCase(Locale.ROOT)
+                : "";
+        String normalizedPhone = StringUtils.hasText(phone)
+                ? normalizePhone(phone)
+                : "";
 
         return contacts.stream()
                 .filter(contact ->
-                        matchesName(contact, normalizedText)
-                                || matchesPhone(
-                                contact,
-                                normalizedPhone
-                        )
+                        (normalizedName.isBlank()
+                                || matchesName(contact, normalizedName))
+                                && (normalizedPhone.isBlank()
+                                || matchesPhone(contact, normalizedPhone))
                 )
                 .toList();
     }

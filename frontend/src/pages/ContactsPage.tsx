@@ -36,8 +36,12 @@ export function ContactsPage() {
   const user = getAuthUser()
 
   const [contacts, setContacts] = useState<Contact[]>([])
-  const [search, setSearch] = useState('')
-  const [activeSearch, setActiveSearch] = useState('')
+  const [nameSearch, setNameSearch] = useState('')
+  const [phoneSearch, setPhoneSearch] = useState('')
+  const [activeSearch, setActiveSearch] = useState({
+    name: '',
+    phone: '',
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -62,11 +66,13 @@ export function ContactsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  const loadContacts = useCallback(async (query = '') => {
+  const loadContacts = useCallback(async (
+    search: { name?: string; phone?: string } = {},
+  ) => {
     try {
       setIsLoading(true)
       setError('')
-      setContacts(await getContacts(query))
+      setContacts(await getContacts(search))
     } catch (requestError) {
       setError(
         getApiErrorMessage(
@@ -94,14 +100,18 @@ export function ContactsPage() {
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const query = search.trim()
-    setActiveSearch(query)
-    void loadContacts(query)
+    const search = {
+      name: nameSearch.trim(),
+      phone: normalizePhone(phoneSearch),
+    }
+    setActiveSearch(search)
+    void loadContacts(search)
   }
 
   function clearSearch() {
-    setSearch('')
-    setActiveSearch('')
+    setNameSearch('')
+    setPhoneSearch('')
+    setActiveSearch({ name: '', phone: '' })
     void loadContacts()
   }
 
@@ -254,100 +264,101 @@ export function ContactsPage() {
           </div>
         </header>
 
-        <Card className="mb-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-            <form
-              className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-end"
-              onSubmit={handleSearch}
-            >
-              <div className="flex-1">
-                <Input
-                  id="contact-search"
-                  label="Поиск по всем контактам"
-                  value={search}
-                  placeholder="Имя или номер телефона"
-                  onChange={(event) => setSearch(event.target.value)}
-                />
+        <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+          <Card>
+            <header className="mb-5 flex items-start gap-3">
+              <div
+                className="
+                  grid size-11 shrink-0 place-items-center rounded-2xl
+                  bg-violet-100 text-xl text-violet-700
+                "
+                aria-hidden="true"
+              >
+                ⌕
               </div>
-              <Button type="submit" isLoading={isLoading}>
-                Найти
-              </Button>
-              {activeSearch && (
-                <Button
-                  type="button"
-                  className="bg-slate-500 hover:bg-slate-600"
-                  onClick={clearSearch}
-                >
-                  Сбросить
-                </Button>
-              )}
-            </form>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Поиск контактов
+                </h2>
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  Найдите контакт отдельно по имени или номеру телефона.
+                </p>
+              </div>
+            </header>
 
-            <Button
-              type="button"
-              onClick={() => setShowCreateForm((value) => !value)}
-            >
-              {showCreateForm ? 'Отмена' : 'Добавить контакт'}
-            </Button>
-          </div>
-
-          {showCreateForm && (
             <form
               className="
-                mt-6 grid gap-4 border-t border-slate-200 pt-6
-                md:grid-cols-[1fr_1fr_220px_auto] md:items-end
+                grid gap-4 md:grid-cols-2
               "
-              onSubmit={(event) => void handleCreate(event)}
+              onSubmit={handleSearch}
             >
               <Input
-                id="new-contact-name"
-                label="Имя"
-                value={newName}
-                required
-                maxLength={200}
-                onChange={(event) => setNewName(event.target.value)}
+                id="contact-name-search"
+                label="Поиск по имени"
+                value={nameSearch}
+                placeholder="Например, Тест2"
+                onChange={(event) => setNameSearch(event.target.value)}
               />
               <Input
-                id="new-contact-phone"
-                label="Телефон"
+                id="contact-phone-search"
+                label="Поиск по телефону"
                 type="tel"
-                value={newPhone}
-                required
-                placeholder="+7 999 123-45-67"
+                value={phoneSearch}
+                placeholder="+7 (999) 123-45-67"
                 onChange={(event) =>
-                  setNewPhone(formatPhone(event.target.value))}
+                  setPhoneSearch(formatPhone(event.target.value))}
               />
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="new-contact-chat-type"
-                  className="text-sm font-semibold text-slate-800"
-                >
-                  Социальная сеть
-                </label>
-                <select
-                  id="new-contact-chat-type"
-                  className="
-                    h-12 w-full rounded-xl border border-slate-300
-                    bg-white px-4 text-slate-900 outline-none transition
-                    focus:border-violet-500 focus:ring-4 focus:ring-violet-100
-                  "
-                  value={newChatType}
-                  disabled={isCreating}
-                  onChange={(event) =>
-                    setNewChatType(event.target.value as typeof newChatType)}
-                >
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="telegram">Telegram</option>
-                  <option value="viber">Viber</option>
-                  <option value="max">MAX</option>
-                </select>
+              <div className="flex flex-wrap gap-3 md:col-span-2">
+                <Button type="submit" isLoading={isLoading}>
+                  Найти контакты
+                </Button>
+                {(activeSearch.name || activeSearch.phone) && (
+                  <Button
+                    type="button"
+                    className="bg-slate-500 hover:bg-slate-600"
+                    onClick={clearSearch}
+                  >
+                    Очистить фильтры
+                  </Button>
+                )}
               </div>
-              <Button type="submit" isLoading={isCreating}>
-                Сохранить
-              </Button>
             </form>
-          )}
-        </Card>
+          </Card>
+
+          <Card
+            className="
+              flex flex-col justify-between overflow-hidden
+              bg-gradient-to-br from-violet-600 to-indigo-700 text-white
+            "
+          >
+            <div>
+              <div
+                className="
+                  mb-4 grid size-11 place-items-center rounded-2xl
+                  bg-white/15 text-2xl
+                "
+                aria-hidden="true"
+              >
+                +
+              </div>
+              <h2 className="text-xl font-bold">Новый контакт</h2>
+              <p className="mt-2 text-sm leading-6 text-violet-100">
+                Добавьте имя, телефон и выберите социальную сеть.
+                Контакт сразу сохранится в Wazzup.
+              </p>
+            </div>
+            <Button
+              type="button"
+              className="
+                mt-6 w-full !bg-white !text-violet-700
+                hover:!bg-violet-50
+              "
+              onClick={() => setShowCreateForm(true)}
+            >
+              Добавить контакт
+            </Button>
+          </Card>
+        </div>
 
         {error && (
           <div className="mb-5">
@@ -360,7 +371,7 @@ export function ContactsPage() {
             <p className="p-8 text-slate-500">Загрузка контактов...</p>
           ) : contacts.length === 0 ? (
             <p className="p-8 text-slate-500">
-              {activeSearch
+              {activeSearch.name || activeSearch.phone
                 ? 'По вашему запросу ничего не найдено.'
                 : 'Список контактов пуст.'}
             </p>
@@ -483,6 +494,118 @@ export function ContactsPage() {
           )}
         </Card>
       </div>
+
+      {showCreateForm && (
+        <div
+          className="
+            fixed inset-0 z-50 grid place-items-center overflow-y-auto
+            bg-slate-950/55 p-4 backdrop-blur-sm
+          "
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-contact-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isCreating) {
+              setShowCreateForm(false)
+            }
+          }}
+        >
+          <section className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <header className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h2
+                  id="create-contact-title"
+                  className="text-2xl font-bold text-slate-900"
+                >
+                  Новый контакт
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Заполните данные для сохранения контакта в Wazzup.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Закрыть окно"
+                className="
+                  grid size-10 shrink-0 place-items-center rounded-xl
+                  text-2xl text-slate-500 hover:bg-slate-100
+                "
+                disabled={isCreating}
+                onClick={() => setShowCreateForm(false)}
+              >
+                ×
+              </button>
+            </header>
+
+            <form
+              className="flex flex-col gap-5"
+              onSubmit={(event) => void handleCreate(event)}
+            >
+              <Input
+                id="new-contact-name"
+                label="Имя"
+                value={newName}
+                required
+                maxLength={200}
+                autoFocus
+                disabled={isCreating}
+                placeholder="Например, Иван Петров"
+                onChange={(event) => setNewName(event.target.value)}
+              />
+              <Input
+                id="new-contact-phone"
+                label="Телефон"
+                type="tel"
+                value={newPhone}
+                required
+                disabled={isCreating}
+                placeholder="+7 (999) 123-45-67"
+                onChange={(event) =>
+                  setNewPhone(formatPhone(event.target.value))}
+              />
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="new-contact-chat-type"
+                  className="text-sm font-semibold text-slate-800"
+                >
+                  Социальная сеть
+                </label>
+                <select
+                  id="new-contact-chat-type"
+                  className="
+                    h-12 w-full rounded-xl border border-slate-300
+                    bg-white px-4 text-slate-900 outline-none transition
+                    focus:border-violet-500 focus:ring-4 focus:ring-violet-100
+                  "
+                  value={newChatType}
+                  disabled={isCreating}
+                  onChange={(event) =>
+                    setNewChatType(event.target.value as PhoneChatType)}
+                >
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="viber">Viber</option>
+                  <option value="max">MAX</option>
+                </select>
+              </div>
+
+              <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  className="bg-slate-500 hover:bg-slate-600"
+                  disabled={isCreating}
+                  onClick={() => setShowCreateForm(false)}
+                >
+                  Отмена
+                </Button>
+                <Button type="submit" isLoading={isCreating}>
+                  Сохранить контакт
+                </Button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {editingContact && (
         <div

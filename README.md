@@ -144,7 +144,7 @@ Backend поддерживает переменные:
 | `PUT /api/settings/api-key` | Сохранение API-ключа | Публичный |
 | `POST /api/auth/login` | Вход по телефону сотрудника | Публичный |
 | `POST /api/auth/logout` | Завершение сессии | Сессия |
-| `GET /api/contacts?search=` | Полный список или поиск | Сессия |
+| `GET /api/contacts?name=&phone=` | Полный список или раздельный поиск по имени и телефону | Сессия |
 | `POST /api/contacts` | Создание контакта | Сессия |
 | `PATCH /api/contacts/{id}` | Полное редактирование | Сессия |
 | `PATCH /api/contacts/{id}/name` | Изменение только имени | Сессия |

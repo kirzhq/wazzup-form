@@ -31,9 +31,10 @@ public class ContactController {
 
     @GetMapping
     public WazzupContactsResponse getContacts(
-            @RequestParam(required = false) String search
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String phone
     ) {
-        return contactService.getContacts(search);
+        return contactService.getContacts(name, phone);
     }
 
     @PostMapping

@@ -38,7 +38,8 @@ class ContactServiceTests {
         when(client.getContactsPage(100))
                 .thenReturn(new WazzupContactsResponse(101L, secondPage));
 
-        WazzupContactsResponse response = service.getContacts("нужный");
+        WazzupContactsResponse response =
+                service.getContacts("нужный", null);
 
         assertThat(response.count()).isEqualTo(1);
         assertThat(response.data()).extracting(WazzupContact::id)
@@ -55,9 +56,47 @@ class ContactServiceTests {
                 .thenReturn(new WazzupContactsResponse(1L, List.of(contact)));
 
         WazzupContactsResponse response =
-                service.getContacts("+7 (999) 123-45-67");
+                service.getContacts(null, "+7 (999) 123-45-67");
 
         assertThat(response.data()).containsExactly(contact);
+    }
+
+    @Test
+    void nameWithDigitDoesNotSearchThatDigitInPhone() {
+        WazzupContact exactName =
+                contact("id-1", "Тест2", "79000000000");
+        WazzupContact digitOnlyInPhone =
+                contact("id-2", "Другой клиент", "79991234567");
+        when(client.getContactsPage(0)).thenReturn(
+                new WazzupContactsResponse(
+                        2L,
+                        List.of(exactName, digitOnlyInPhone)
+                )
+        );
+
+        WazzupContactsResponse response =
+                service.getContacts("Тест2", null);
+
+        assertThat(response.data()).containsExactly(exactName);
+    }
+
+    @Test
+    void combinesNameAndPhoneFilters() {
+        WazzupContact matching =
+                contact("id-1", "Иван Петров", "79991234567");
+        WazzupContact wrongPhone =
+                contact("id-2", "Иван Сидоров", "78881234567");
+        when(client.getContactsPage(0)).thenReturn(
+                new WazzupContactsResponse(
+                        2L,
+                        List.of(matching, wrongPhone)
+                )
+        );
+
+        WazzupContactsResponse response =
+                service.getContacts("Иван", "999");
+
+        assertThat(response.data()).containsExactly(matching);
     }
 
     @Test
