@@ -100,37 +100,54 @@ public class PartnerMessagesService {
 
     private int importCsv(byte[] bytes) throws Exception {
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
-        Map<String, TimedCandidate> candidates = new LinkedHashMap<>();
+        Map<String, TimedCandidate> inboundCandidates = new LinkedHashMap<>();
+        Map<String, TimedCandidate> outboundFallbacks = new LinkedHashMap<>();
         try (InputStreamReader reader = new InputStreamReader(
                 new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
             var parser = format.parse(reader);
             log.info("Колонки выгрузки Wazzup: {}", parser.getHeaderNames());
             for (CSVRecord record : parser) {
                 String direction = field(record, "direction");
-                if (!"inbound".equalsIgnoreCase(direction)) continue;
+                boolean inbound = "inbound".equalsIgnoreCase(direction);
+                boolean outbound = "outbound".equalsIgnoreCase(direction);
+                if (!inbound && !outbound) continue;
                 String transport = field(record, "transport", "chat_type");
                 String chatId = field(record, "chat_id");
                 if (transport == null || chatId == null) continue;
                 String normalizedTransport = transport.trim().toLowerCase(Locale.ROOT);
                 if (!("max".equals(normalizedTransport)
-                        || "tgapi".equals(normalizedTransport))) continue;
+                        || "tgapi".equals(normalizedTransport)
+                        || "whatsapp".equals(normalizedTransport))) continue;
                 String key = transport + ":" + chatId;
+                String username = field(record, "user_username", "username");
+                String contactName = inbound
+                        ? firstNonBlank(username, field(record, "user_name", "name"))
+                        : username;
+                if (contactName == null) continue;
                 ContactService.ChatContactCandidate next = new ContactService.ChatContactCandidate(
                         transport,
                         field(record, "chat_id", "recipient_chat_id", "recipient.chat_id"),
-                        field(record, "user_username", "username"),
+                        username,
                         field(record, "user_phone", "phone"),
-                        field(record, "user_name", "name"));
+                        contactName);
                 Instant timestamp = parseTimestamp(field(record, "datetime", "timestamp"));
-                TimedCandidate current = candidates.get(key);
+                Map<String, TimedCandidate> target = inbound
+                        ? inboundCandidates : outboundFallbacks;
+                TimedCandidate current = target.get(key);
                 if (current == null || timestamp.isAfter(current.timestamp())) {
-                    candidates.put(key, new TimedCandidate(timestamp, next));
+                    target.put(key, new TimedCandidate(timestamp, next));
                 }
             }
         }
+        Map<String, TimedCandidate> candidates = new LinkedHashMap<>(outboundFallbacks);
+        candidates.putAll(inboundCandidates);
         return contactService.ensureChatContacts(candidates.values().stream()
                 .map(TimedCandidate::candidate)
                 .toList());
+    }
+
+    private String firstNonBlank(String preferred, String fallback) {
+        return preferred != null && !preferred.isBlank() ? preferred : fallback;
     }
 
     private Instant parseTimestamp(String value) {

@@ -480,7 +480,7 @@ public class ContactService {
                     ? candidate.name().trim()
                     : (StringUtils.hasText(candidate.username())
                     ? candidate.username().trim() : null);
-            if (!isUsableImportedName(contactName, normalizedChatId)) continue;
+            if (!isUsableImportedName(contactName, normalizedChatId, normalizedPhone)) continue;
             WazzupContact existingContact = existingByChatKey.get(chatKey);
             if (existingContact != null) {
                 if (shouldReplaceImportedName(existingContact.name(), normalizedChatId, contactName)) {
@@ -531,10 +531,13 @@ public class ContactService {
                 || current.chars().allMatch(Character::isDigit));
     }
 
-    private boolean isUsableImportedName(String name, String chatId) {
+    private boolean isUsableImportedName(String name, String chatId, String phone) {
         if (!StringUtils.hasText(name)) return false;
         String normalizedName = name.trim();
+        String nameDigits = normalizedName.replaceAll("\\D", "");
         return !normalizedName.equals(chatId)
+                && !(nameDigits.length() >= 7
+                && (nameDigits.equals(chatId) || nameDigits.equals(phone)))
                 && !normalizedName.matches("[0-9_\\-]{5,}");
     }
 

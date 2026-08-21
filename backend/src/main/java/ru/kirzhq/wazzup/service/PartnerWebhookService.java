@@ -83,7 +83,8 @@ public class PartnerWebhookService {
         if (!(recipientValue instanceof Map<?, ?> recipient)) return;
         String chatType = string(recipient.get("chat_type"));
         if (!("max".equalsIgnoreCase(chatType)
-                || "telegram".equalsIgnoreCase(chatType))) return;
+                || "telegram".equalsIgnoreCase(chatType)
+                || "whatsapp".equalsIgnoreCase(chatType))) return;
         contactService.ensureChatContact(
                 string(recipient.get("chat_type")),
                 string(recipient.get("chat_id")),
