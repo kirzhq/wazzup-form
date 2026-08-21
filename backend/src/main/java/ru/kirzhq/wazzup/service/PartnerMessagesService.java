@@ -100,15 +100,18 @@ public class PartnerMessagesService {
 
     private int importCsv(byte[] bytes) throws Exception {
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
-        Map<String, ContactService.ChatContactCandidate> candidates = new LinkedHashMap<>();
+        Map<String, TimedCandidate> candidates = new LinkedHashMap<>();
         try (InputStreamReader reader = new InputStreamReader(
                 new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
             var parser = format.parse(reader);
             log.info("Колонки выгрузки Wazzup: {}", parser.getHeaderNames());
             for (CSVRecord record : parser) {
+                String direction = field(record, "direction");
+                if (!"inbound".equalsIgnoreCase(direction)) continue;
                 String transport = field(record, "transport", "chat_type");
                 String chatId = field(record, "chat_id");
                 if (transport == null || chatId == null) continue;
+                if (!"max".equalsIgnoreCase(transport.trim())) continue;
                 String key = transport + ":" + chatId;
                 ContactService.ChatContactCandidate next = new ContactService.ChatContactCandidate(
                         transport,
@@ -116,27 +119,25 @@ public class PartnerMessagesService {
                         field(record, "user_username", "username"),
                         field(record, "user_phone", "phone"),
                         field(record, "user_name", "name"));
-                candidates.merge(key, next, this::mergeCandidate);
+                Instant timestamp = parseTimestamp(field(record, "datetime", "timestamp"));
+                TimedCandidate current = candidates.get(key);
+                if (current == null || timestamp.isAfter(current.timestamp())) {
+                    candidates.put(key, new TimedCandidate(timestamp, next));
+                }
             }
         }
-        return contactService.ensureChatContacts(List.copyOf(candidates.values()));
+        return contactService.ensureChatContacts(candidates.values().stream()
+                .map(TimedCandidate::candidate)
+                .toList());
     }
 
-    private ContactService.ChatContactCandidate mergeCandidate(
-            ContactService.ChatContactCandidate current,
-            ContactService.ChatContactCandidate next
-    ) {
-        return new ContactService.ChatContactCandidate(
-                current.chatType(),
-                current.chatId(),
-                prefer(current.username(), next.username()),
-                prefer(current.phone(), next.phone()),
-                prefer(current.name(), next.name())
-        );
-    }
-
-    private String prefer(String current, String next) {
-        return next != null && !next.isBlank() ? next : current;
+    private Instant parseTimestamp(String value) {
+        if (value == null) return Instant.EPOCH;
+        try {
+            return Instant.parse(value);
+        } catch (Exception ignored) {
+            return Instant.EPOCH;
+        }
     }
 
     public void requestSynchronization() {
@@ -155,4 +156,9 @@ public class PartnerMessagesService {
         }
         return null;
     }
+
+    private record TimedCandidate(
+            Instant timestamp,
+            ContactService.ChatContactCandidate candidate
+    ) {}
 }
