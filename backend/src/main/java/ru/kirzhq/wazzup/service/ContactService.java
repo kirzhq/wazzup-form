@@ -74,7 +74,10 @@ public class ContactService {
 
         validatePhone(phone);
 
-        String contactId = UUID.randomUUID().toString();
+        String contactId = "%013d-%s".formatted(
+                System.currentTimeMillis(),
+                UUID.randomUUID().toString().substring(0, 12)
+        );
 
         WazzupContactData contactData = createContactData(
                 chatType,

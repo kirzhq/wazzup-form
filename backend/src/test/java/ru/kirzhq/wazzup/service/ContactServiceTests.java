@@ -6,6 +6,7 @@ import ru.kirzhq.wazzup.dto.WazzupContact;
 import ru.kirzhq.wazzup.dto.WazzupContactData;
 import ru.kirzhq.wazzup.dto.WazzupContactsResponse;
 import ru.kirzhq.wazzup.dto.UpdateContactRequest;
+import ru.kirzhq.wazzup.dto.CreateContactRequest;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -16,6 +17,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class ContactServiceTests {
 
@@ -60,6 +62,25 @@ class ContactServiceTests {
                 service.getContacts(null, "+7 (999) 123-45-67");
 
         assertThat(response.data()).containsExactly(contact);
+    }
+
+    @Test
+    void searchesByAnyPhoneFragment() {
+        WazzupContact matching = new WazzupContact(
+                "id-1",
+                "user-1",
+                "Клиент Telegram",
+                List.of(new WazzupContactData(
+                        "telegram", "494628845", "litovec", "79119289893"
+                )),
+                null
+        );
+        when(client.getContactsPage(0))
+                .thenReturn(new WazzupContactsResponse(1L, List.of(matching)));
+
+        WazzupContactsResponse response = service.getContacts(null, "92898");
+
+        assertThat(response.data()).containsExactly(matching);
     }
 
     @Test
@@ -156,6 +177,29 @@ class ContactServiceTests {
 
         assertThat(changed).isZero();
         verify(client, never()).saveContacts(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void createsWhatsappContactWithResponsibleUserAndPhoneChatId() {
+        when(client.getContactById(anyString())).thenAnswer(invocation ->
+                new WazzupContact(
+                        invocation.getArgument(0), "user-1", "Новый клиент",
+                        List.of(new WazzupContactData(
+                                "whatsapp", "79991234567", null, null
+                        )), null
+                ));
+
+        WazzupContact created = service.createContact(new CreateContactRequest(
+                "Новый клиент", "+7 (999) 123-45-67", "user-1", "whatsapp"
+        ));
+
+        assertThat(created.name()).isEqualTo("Новый клиент");
+        verify(client).saveContacts(argThat(contacts -> {
+            WazzupContact contact = contacts.getFirst();
+            return contact.responsibleUserId().equals("user-1")
+                    && contact.contactData().getFirst().chatType().equals("whatsapp")
+                    && contact.contactData().getFirst().chatId().equals("79991234567");
+        }));
     }
 
     private WazzupContact contact(String id, String name, String phone) {

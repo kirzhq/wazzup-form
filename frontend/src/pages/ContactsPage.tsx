@@ -37,6 +37,7 @@ import {
 } from '../utils/phone'
 
 type PhoneChatType = 'whatsapp' | 'telegram' | 'viber' | 'max'
+type ContactSort = 'newest' | 'name-asc' | 'name-desc'
 
 function getContactPhone(contact: Contact): string {
   const contactData = contact.contactData ?? []
@@ -96,11 +97,13 @@ export function ContactsPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [pendingContacts, setPendingContacts] = useState<PendingContact[]>([])
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [hiddenNetworks, setHiddenNetworks] = useState<Set<string>>(
     () => new Set(),
   )
+  const [contactSort, setContactSort] = useState<ContactSort>('newest')
 
   const availableNetworks = useMemo(() => Array.from(new Set(
     contacts
@@ -109,12 +112,20 @@ export function ContactsPage() {
   )).sort((left, right) => left.localeCompare(right, 'ru')), [contacts])
 
   const displayedContacts = useMemo(() => {
-    if (hiddenNetworks.size === 0) return contacts
-    return contacts.filter((contact) => {
+    const filtered = hiddenNetworks.size === 0
+      ? [...contacts]
+      : contacts.filter((contact) => {
       const networks = getContactNetworks(contact)
       return networks.some((network) => !hiddenNetworks.has(network))
     })
-  }, [contacts, hiddenNetworks])
+    if (contactSort === 'newest') return filtered.reverse()
+    return filtered.sort((left, right) => {
+      const result = left.name.localeCompare(right.name, 'ru', {
+        sensitivity: 'base',
+      })
+      return contactSort === 'name-asc' ? result : -result
+    })
+  }, [contacts, hiddenNetworks, contactSort])
 
   function toggleNetwork(network: string) {
     setHiddenNetworks((current) => {
@@ -216,7 +227,7 @@ export function ContactsPage() {
     event.preventDefault()
     const search = {
       name: nameSearch.trim(),
-      phone: normalizePhone(phoneSearch),
+      phone: phoneSearch.replace(/\D/g, ''),
     }
     setActiveSearch(search)
     void loadContacts(search)
@@ -240,6 +251,7 @@ export function ContactsPage() {
     try {
       setIsCreating(true)
       setError('')
+      setNotice('')
       await createContact({
         name: newName.trim(),
         phone: normalizePhone(newPhone),
@@ -251,6 +263,9 @@ export function ContactsPage() {
       setNewChatType('whatsapp')
       setShowCreateForm(false)
       await loadContacts(activeSearch)
+      setNotice(
+        'Контакт создан в Wazzup. Новый диалог появится после первого сообщения или входящего обращения.',
+      )
     } catch (requestError) {
       setError(
         getApiErrorMessage(
@@ -419,9 +434,10 @@ export function ContactsPage() {
                 label="Поиск по телефону"
                 type="tel"
                 value={phoneSearch}
-                placeholder="+7 (999) 123-45-67"
-                onChange={(event) =>
-                  setPhoneSearch(formatPhone(event.target.value))}
+                placeholder="Например, 12345"
+                onChange={(event) => setPhoneSearch(
+                  event.target.value.replace(/[^\d()+\-\s]/g, ''),
+                )}
               />
               <div className="flex flex-wrap gap-3 md:col-span-2">
                 <Button type="submit" isLoading={isLoading}>
@@ -478,6 +494,11 @@ export function ContactsPage() {
         {error && (
           <div className="mb-5">
             <Alert variant="error">{error}</Alert>
+          </div>
+        )}
+        {notice && (
+          <div className="mb-5">
+            <Alert variant="success">{notice}</Alert>
           </div>
         )}
 
@@ -545,6 +566,19 @@ export function ContactsPage() {
               Контакты: {displayedContacts.length}
               {displayedContacts.length !== contacts.length && ` из ${contacts.length}`}
             </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <span>Сортировка</span>
+                <select
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2"
+                  value={contactSort}
+                  onChange={(event) => setContactSort(event.target.value as ContactSort)}
+                >
+                  <option value="newest">Сначала новые</option>
+                  <option value="name-asc">От А до Я</option>
+                  <option value="name-desc">От Я до А</option>
+                </select>
+              </label>
             <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <legend className="sr-only">Фильтр по социальной сети</legend>
               {availableNetworks.map((network) => (
@@ -562,6 +596,7 @@ export function ContactsPage() {
                 </label>
               ))}
             </fieldset>
+            </div>
           </div>
           {isLoading ? (
             <p className="p-8 text-slate-500">Загрузка контактов...</p>
@@ -783,6 +818,11 @@ export function ContactsPage() {
                   <option value="max">MAX</option>
                 </select>
               </div>
+
+              <Alert variant="info">
+                Кнопка создаёт карточку контакта. Сам диалог появится в Wazzup
+                после первого входящего или отправленного сообщения.
+              </Alert>
 
               <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Button
