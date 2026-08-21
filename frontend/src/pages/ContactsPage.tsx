@@ -120,6 +120,11 @@ export function ContactsPage() {
     })
     if (contactSort === 'newest') return filtered.reverse()
     return filtered.sort((left, right) => {
+      const leftStartsWithLetter = /^\p{L}/u.test(left.name.trim())
+      const rightStartsWithLetter = /^\p{L}/u.test(right.name.trim())
+      if (leftStartsWithLetter !== rightStartsWithLetter) {
+        return leftStartsWithLetter ? -1 : 1
+      }
       const result = left.name.localeCompare(right.name, 'ru', {
         sensitivity: 'base',
       })
