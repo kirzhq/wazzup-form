@@ -111,7 +111,9 @@ public class PartnerMessagesService {
                 String transport = field(record, "transport", "chat_type");
                 String chatId = field(record, "chat_id");
                 if (transport == null || chatId == null) continue;
-                if (!"max".equalsIgnoreCase(transport.trim())) continue;
+                String normalizedTransport = transport.trim().toLowerCase(Locale.ROOT);
+                if (!("max".equals(normalizedTransport)
+                        || "tgapi".equals(normalizedTransport))) continue;
                 String key = transport + ":" + chatId;
                 ContactService.ChatContactCandidate next = new ContactService.ChatContactCandidate(
                         transport,
