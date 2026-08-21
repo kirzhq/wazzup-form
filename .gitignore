@@ -12,6 +12,9 @@ backend/target/
 frontend/node_modules/
 frontend/dist/
 
+# Локальные резервные копии с персональными данными Wazzup
+backups/
+
 *.db
 *.db-shm
 *.db-wal

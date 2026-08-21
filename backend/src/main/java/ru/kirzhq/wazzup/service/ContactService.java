@@ -433,6 +433,13 @@ public class ContactService {
     }
 
     public synchronized int ensureChatContacts(List<ChatContactCandidate> candidates) {
+        return ensureChatContacts(candidates, Set.of());
+    }
+
+    public synchronized int ensureChatContacts(
+            List<ChatContactCandidate> candidates,
+            Set<String> replaceableImportedNames
+    ) {
         if (candidates == null || candidates.isEmpty()) return 0;
 
         Set<String> existingKeys = new java.util.HashSet<>();
@@ -472,7 +479,7 @@ public class ContactService {
 
             String normalizedType = normalizeImportedChatType(chatType);
             if (normalizedType.endsWith("group")) continue;
-        String normalizedChatId = chatId.trim();
+            String normalizedChatId = chatId.trim();
             String normalizedPhone = normalizePhone(candidate.phone());
             String chatKey = normalizedType + ":" + normalizedChatId;
             String phoneKey = normalizedType + ":phone:" + normalizedPhone;
@@ -483,7 +490,9 @@ public class ContactService {
             if (!isUsableImportedName(contactName, normalizedChatId, normalizedPhone)) continue;
             WazzupContact existingContact = existingByChatKey.get(chatKey);
             if (existingContact != null) {
-                if (shouldReplaceImportedName(existingContact.name(), normalizedChatId, contactName)) {
+                if (shouldReplaceImportedName(
+                        existingContact.name(), normalizedChatId, contactName, replaceableImportedNames
+                )) {
                     newContacts.add(new WazzupContact(
                             existingContact.id(), existingContact.responsibleUserId(),
                             contactName, existingContact.contactData(), existingContact.uri()
@@ -523,12 +532,19 @@ public class ContactService {
         return "tgapi".equals(normalized) ? "telegram" : normalized;
     }
 
-    private boolean shouldReplaceImportedName(String current, String chatId, String candidate) {
+    private boolean shouldReplaceImportedName(
+            String current,
+            String chatId,
+            String candidate,
+            Set<String> replaceableImportedNames
+    ) {
         return StringUtils.hasText(candidate)
                 && !candidate.equals(chatId)
+                && !candidate.equalsIgnoreCase(current)
                 && (!StringUtils.hasText(current)
                 || current.equals(chatId)
-                || current.chars().allMatch(Character::isDigit));
+                || current.chars().allMatch(Character::isDigit)
+                || replaceableImportedNames.stream().anyMatch(current::equalsIgnoreCase));
     }
 
     private boolean isUsableImportedName(String name, String chatId, String phone) {

@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class PartnerMessagesService {
@@ -141,9 +142,10 @@ public class PartnerMessagesService {
         }
         Map<String, TimedCandidate> candidates = new LinkedHashMap<>(outboundFallbacks);
         candidates.putAll(inboundCandidates);
-        return contactService.ensureChatContacts(candidates.values().stream()
-                .map(TimedCandidate::candidate)
-                .toList());
+        return contactService.ensureChatContacts(
+                candidates.values().stream().map(TimedCandidate::candidate).toList(),
+                Set.of("Елена")
+        );
     }
 
     private String firstNonBlank(String preferred, String fallback) {
