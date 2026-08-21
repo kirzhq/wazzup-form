@@ -10,6 +10,7 @@ import ru.kirzhq.wazzup.dto.CreateContactRequest;
 import ru.kirzhq.wazzup.dto.WazzupContact;
 import ru.kirzhq.wazzup.dto.WazzupContactData;
 import ru.kirzhq.wazzup.dto.WazzupContactsResponse;
+import ru.kirzhq.wazzup.dto.WazzupUser;
 import ru.kirzhq.wazzup.dto.UpdateContactRequest;
 import ru.kirzhq.wazzup.exception.WazzupApiException;
 
@@ -185,7 +186,7 @@ public class ContactService {
             return false;
         }
 
-        return contact.contactData()
+        boolean directMatch = contact.contactData()
                 .stream()
                 .anyMatch(data ->
                         data != null
@@ -194,12 +195,37 @@ public class ContactService {
                                         data.phone(),
                                         searchPhone
                                 )
-                                        || containsPhone(
+                                        || (isPhoneChatId(data.chatType()) && containsPhone(
                                         data.chatId(),
                                         searchPhone
-                                )
+                                ))
                         )
                 );
+        if (directMatch) return true;
+
+        for (String chatType : List.of("telegram", "max")) {
+            List<String> chatIds = contact.contactData().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .filter(data -> chatType.equalsIgnoreCase(data.chatType()))
+                    .map(WazzupContactData::chatId)
+                    .filter(StringUtils::hasText)
+                    .toList();
+            if (chatIds.size() >= 2 && chatIds.stream().anyMatch(value ->
+                    isLikelyImportedPhone(value) && containsPhone(value, searchPhone))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isLikelyImportedPhone(String value) {
+        String phone = normalizePhone(value);
+        return phone.length() == 11 && phone.startsWith("7");
+    }
+
+    private boolean isPhoneChatId(String chatType) {
+        return "whatsapp".equalsIgnoreCase(chatType)
+                || "viber".equalsIgnoreCase(chatType);
     }
 
     private boolean containsPhone(
@@ -352,14 +378,33 @@ public class ContactService {
 
         String phone = normalizePhone(request.phone());
         String chatType = normalizeChatType(request.chatType());
-        validatePhone(phone);
+        if (!phone.isBlank()) validatePhone(phone);
+        if (("whatsapp".equals(chatType) || "viber".equals(chatType)) && phone.isBlank()) {
+            throw new IllegalArgumentException("Для WhatsApp и Viber номер телефона обязателен");
+        }
 
         WazzupContact existingContact = findContactById(contactId.trim());
+        WazzupContactData existingData = existingContact.contactData() == null
+                ? null
+                : existingContact.contactData().stream()
+                .filter(data -> data != null && chatType.equalsIgnoreCase(data.chatType()))
+                .findFirst().orElse(null);
+        String preservedChatId = StringUtils.hasText(request.chatId())
+                ? request.chatId().trim()
+                : existingData == null ? phone : existingData.chatId();
+        WazzupContactData updatedData = "telegram".equals(chatType) || "max".equals(chatType)
+                ? new WazzupContactData(
+                chatType,
+                preservedChatId,
+                existingData == null ? null : existingData.username(),
+                phone.isBlank() ? null : phone
+        )
+                : createContactData(chatType, phone);
         WazzupContact updatedContact = new WazzupContact(
                 existingContact.id(),
                 existingContact.responsibleUserId(),
                 request.name().trim(),
-                List.of(createContactData(chatType, phone)),
+                List.of(updatedData),
                 existingContact.uri()
         );
 
@@ -374,4 +419,118 @@ public class ContactService {
             throw new ContactNotFoundException(contactId);
         }
     }
+
+    public synchronized boolean ensureChatContact(
+            String chatType,
+            String chatId,
+            String username,
+            String phone,
+            String name
+    ) {
+        return ensureChatContacts(List.of(new ChatContactCandidate(
+                chatType, chatId, username, phone, name
+        ))) > 0;
+    }
+
+    public synchronized int ensureChatContacts(List<ChatContactCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) return 0;
+
+        Set<String> existingKeys = new java.util.HashSet<>();
+        java.util.Map<String, WazzupContact> existingByChatKey = new java.util.HashMap<>();
+        java.util.Map<String, WazzupContact> emptyContactsByName = new java.util.HashMap<>();
+        for (WazzupContact contact : getAllContacts()) {
+            if (contact == null || contact.contactData() == null) continue;
+            if (contact.contactData().isEmpty() && StringUtils.hasText(contact.name())) {
+                emptyContactsByName.putIfAbsent(
+                        contact.name().trim().toLowerCase(Locale.ROOT), contact
+                );
+            }
+            for (WazzupContactData data : contact.contactData()) {
+                if (data == null || !StringUtils.hasText(data.chatType())) continue;
+                if (StringUtils.hasText(data.chatId())) {
+                    String key = data.chatType().toLowerCase(Locale.ROOT) + ":" + data.chatId();
+                    existingKeys.add(key);
+                    existingByChatKey.putIfAbsent(key, contact);
+                }
+                String dataPhone = normalizePhone(data.phone());
+                if (!dataPhone.isBlank()) {
+                    existingKeys.add(data.chatType().toLowerCase(Locale.ROOT) + ":phone:" + dataPhone);
+                }
+            }
+        }
+
+        WazzupUser[] users = wazzupApiClient.getUsers();
+        if (users == null || users.length == 0 || !StringUtils.hasText(users[0].id())) {
+            throw new WazzupApiException("В Wazzup нет сотрудника для новых контактов");
+        }
+
+        List<WazzupContact> newContacts = new ArrayList<>();
+        for (ChatContactCandidate candidate : candidates) {
+            String chatType = candidate.chatType();
+            String chatId = candidate.chatId();
+            if (!StringUtils.hasText(chatType) || !StringUtils.hasText(chatId)) continue;
+
+            String normalizedType = normalizeImportedChatType(chatType);
+            if (normalizedType.endsWith("group")) continue;
+        String normalizedChatId = chatId.trim();
+            String normalizedPhone = normalizePhone(candidate.phone());
+            String chatKey = normalizedType + ":" + normalizedChatId;
+            String phoneKey = normalizedType + ":phone:" + normalizedPhone;
+            String contactName = StringUtils.hasText(candidate.name())
+                    ? candidate.name().trim()
+                    : (StringUtils.hasText(candidate.username())
+                    ? candidate.username().trim() : normalizedChatId);
+            WazzupContact existingContact = existingByChatKey.get(chatKey);
+            if (existingContact != null) {
+                if (shouldReplaceImportedName(existingContact.name(), normalizedChatId, contactName)) {
+                    newContacts.add(new WazzupContact(
+                            existingContact.id(), existingContact.responsibleUserId(),
+                            contactName, existingContact.contactData(), existingContact.uri()
+                    ));
+                }
+                continue;
+            }
+            if (!normalizedPhone.isBlank() && existingKeys.contains(phoneKey)) continue;
+
+            WazzupContact emptyContact = emptyContactsByName.remove(
+                    contactName.toLowerCase(Locale.ROOT)
+            );
+            newContacts.add(new WazzupContact(
+                emptyContact == null ? UUID.randomUUID().toString() : emptyContact.id(),
+                emptyContact == null ? users[0].id() : emptyContact.responsibleUserId(),
+                contactName,
+                List.of(new WazzupContactData(
+                        normalizedType,
+                        normalizedChatId,
+                            StringUtils.hasText(candidate.username()) ? candidate.username().trim() : null,
+                        normalizedPhone.isBlank() ? null : normalizedPhone
+                )),
+                emptyContact == null ? null : emptyContact.uri()
+            ));
+            existingKeys.add(chatKey);
+            if (!normalizedPhone.isBlank()) existingKeys.add(phoneKey);
+        }
+
+        for (int from = 0; from < newContacts.size(); from += 100) {
+            wazzupApiClient.saveContacts(newContacts.subList(from, Math.min(from + 100, newContacts.size())));
+        }
+        return newContacts.size();
+    }
+
+    private String normalizeImportedChatType(String chatType) {
+        String normalized = chatType.trim().toLowerCase(Locale.ROOT);
+        return "tgapi".equals(normalized) ? "telegram" : normalized;
+    }
+
+    private boolean shouldReplaceImportedName(String current, String chatId, String candidate) {
+        return StringUtils.hasText(candidate)
+                && !candidate.equals(chatId)
+                && (!StringUtils.hasText(current)
+                || current.equals(chatId)
+                || current.chars().allMatch(Character::isDigit));
+    }
+
+    public record ChatContactCandidate(
+            String chatType, String chatId, String username, String phone, String name
+    ) {}
 }

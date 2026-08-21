@@ -7,6 +7,13 @@ services:
     environment:
       DB_URL: jdbc:sqlite:/data/wazzup.db
       SERVER_PORT: 8080
+      WAZZUP_PARTNER_CLIENT_ID: ${WAZZUP_PARTNER_CLIENT_ID:-}
+      WAZZUP_PARTNER_EMAIL: ${WAZZUP_PARTNER_EMAIL:-}
+      WAZZUP_PARTNER_PASSWORD: ${WAZZUP_PARTNER_PASSWORD:-}
+      WAZZUP_OAUTH_REDIRECT_URI: ${WAZZUP_OAUTH_REDIRECT_URI:-http://127.0.0.1:8080/api/partner/oauth/callback}
+      WAZZUP_TOKEN_ENCRYPTION_KEY: ${WAZZUP_TOKEN_ENCRYPTION_KEY:-}
+      WAZZUP_WEBHOOK_URL: ${WAZZUP_WEBHOOK_URL:-}
+      WAZZUP_SYNC_ENABLED: ${WAZZUP_SYNC_ENABLED:-false}
     volumes:
       - wazzup_sqlite_data:/data
     restart: unless-stopped

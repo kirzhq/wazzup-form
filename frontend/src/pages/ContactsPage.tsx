@@ -2,6 +2,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -31,6 +32,51 @@ import {
 
 type PhoneChatType = 'whatsapp' | 'telegram' | 'viber' | 'max'
 
+function getContactPhone(contact: Contact): string {
+  const contactData = contact.contactData ?? []
+  const data = contactData.find((item) => item.phone)
+    ?? contactData.find((item) =>
+      (item.chatType === 'whatsapp' || item.chatType === 'viber')
+      && item.chatId)
+  if (data?.phone) return data.phone
+  if (data && (data.chatType === 'whatsapp' || data.chatType === 'viber')) {
+    return data.chatId ?? ''
+  }
+
+  for (const network of ['telegram', 'max']) {
+    const networkData = contactData.filter((item) =>
+      item.chatType === network && item.chatId)
+    if (networkData.length < 2) continue
+    const phoneData = networkData.find((item) => {
+      const digits = normalizePhone(item.chatId ?? '')
+      return digits.length === 11 && digits.startsWith('7')
+    })
+    if (phoneData?.chatId) return phoneData.chatId
+  }
+  return ''
+}
+
+function getContactNetworks(contact: Contact): string[] {
+  return Array.from(new Set(
+    (contact.contactData ?? [])
+      .map((data) => data.chatType)
+      .filter((network): network is string => Boolean(network)),
+  ))
+}
+
+function getContactChatId(contact: Contact, network: PhoneChatType): string {
+  const items = (contact.contactData ?? []).filter((data) =>
+    data.chatType === network && data.chatId)
+  if (network === 'telegram' || network === 'max') {
+    const platformId = items.find((data) => {
+      const digits = normalizePhone(data.chatId ?? '')
+      return !(digits.length === 11 && digits.startsWith('7'))
+    })
+    if (platformId?.chatId) return platformId.chatId
+  }
+  return items[0]?.chatId ?? ''
+}
+
 export function ContactsPage() {
   const navigate = useNavigate()
   const user = getAuthUser()
@@ -44,6 +90,32 @@ export function ContactsPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [hiddenNetworks, setHiddenNetworks] = useState<Set<string>>(
+    () => new Set(),
+  )
+
+  const availableNetworks = useMemo(() => Array.from(new Set(
+    contacts
+      .flatMap(getContactNetworks)
+      .filter((network): network is string => Boolean(network)),
+  )).sort((left, right) => left.localeCompare(right, 'ru')), [contacts])
+
+  const displayedContacts = useMemo(() => {
+    if (hiddenNetworks.size === 0) return contacts
+    return contacts.filter((contact) => {
+      const networks = getContactNetworks(contact)
+      return networks.some((network) => !hiddenNetworks.has(network))
+    })
+  }, [contacts, hiddenNetworks])
+
+  function toggleNetwork(network: string) {
+    setHiddenNetworks((current) => {
+      const next = new Set(current)
+      if (next.has(network)) next.delete(network)
+      else next.add(network)
+      return next
+    })
+  }
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
@@ -157,7 +229,7 @@ export function ContactsPage() {
     setEditingContact(contact)
     setEditingName(contact.name)
     setEditingPhone(
-      formatPhone(contactData?.phone ?? contactData?.chatId ?? ''),
+      formatPhone(getContactPhone(contact)),
     )
     setEditingChatType(
       chatType === 'telegram'
@@ -211,6 +283,7 @@ export function ContactsPage() {
         name: editingName.trim(),
         phone: normalizePhone(editingPhone),
         chatType: editingChatType,
+        chatId: getContactChatId(editingContact, editingChatType),
       })
       setEditingContact(null)
       await loadContacts(activeSearch)
@@ -367,6 +440,34 @@ export function ContactsPage() {
         )}
 
         <Card className="overflow-hidden p-0">
+          <div
+            className="
+              flex flex-wrap items-center justify-between gap-3
+              border-b border-slate-200 px-6 py-4
+            "
+          >
+            <p className="font-semibold text-slate-900">
+              Контакты: {displayedContacts.length}
+              {displayedContacts.length !== contacts.length && ` из ${contacts.length}`}
+            </p>
+            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <legend className="sr-only">Фильтр по социальной сети</legend>
+              {availableNetworks.map((network) => (
+                <label
+                  key={network}
+                  className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-violet-600"
+                    checked={!hiddenNetworks.has(network)}
+                    onChange={() => toggleNetwork(network)}
+                  />
+                  {network}
+                </label>
+              ))}
+            </fieldset>
+          </div>
           {isLoading ? (
             <p className="p-8 text-slate-500">Загрузка контактов...</p>
           ) : contacts.length === 0 ? (
@@ -387,10 +488,9 @@ export function ContactsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {contacts.map((contact) => {
-                    const contactData = contact.contactData?.[0]
-                    const phone =
-                      contactData?.phone ?? contactData?.chatId ?? '—'
+                  {displayedContacts.map((contact) => {
+                    const phone = getContactPhone(contact) || '—'
+                    const networks = getContactNetworks(contact)
 
                     return (
                       <tr
@@ -404,7 +504,7 @@ export function ContactsPage() {
                           {phone === '—' ? phone : formatPhone(phone)}
                         </td>
                         <td className="px-6 py-4 text-slate-700">
-                          {contactData?.chatType ?? '—'}
+                          {networks.length > 0 ? networks.join(', ') : '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <>
@@ -673,7 +773,6 @@ export function ContactsPage() {
                 label="Телефон"
                 type="tel"
                 value={editingPhone}
-                required
                 disabled={isEditing}
                 onChange={(event) =>
                   setEditingPhone(formatPhone(event.target.value))}

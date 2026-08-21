@@ -58,6 +58,7 @@ export interface UpdateContactRequest {
   name: string
   phone: string
   chatType: CreateContactRequest['chatType']
+  chatId?: string
 }
 
 export async function updateContact(

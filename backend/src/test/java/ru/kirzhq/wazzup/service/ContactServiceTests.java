@@ -117,7 +117,8 @@ class ContactServiceTests {
                 new UpdateContactRequest(
                         "Новое имя",
                         "+7 (999) 000-11-22",
-                        "telegram"
+                        "telegram",
+                        null
                 )
         );
 

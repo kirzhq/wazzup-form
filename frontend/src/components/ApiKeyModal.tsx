@@ -1,9 +1,15 @@
 import {
   type FormEvent,
+  useEffect,
   useState,
 } from 'react'
 
 import { getApiErrorMessage } from '../api/getApiErrorMessage'
+import {
+  getPartnerStatus,
+  startPartnerOauth,
+  type PartnerStatus,
+} from '../api/partnerApi'
 import { saveApiKey } from '../api/settingsApi'
 import { Button } from './ui/Button/Button'
 import { Input } from './ui/Input/Input'
@@ -17,6 +23,28 @@ export function ApiKeyModal({ onClose }: ApiKeyModalProps) {
   const [showApiKey, setShowApiKey] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [partnerStatus, setPartnerStatus] = useState<PartnerStatus | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
+
+  useEffect(() => {
+    void getPartnerStatus()
+      .then(setPartnerStatus)
+      .catch(() => setPartnerStatus(null))
+  }, [])
+
+  async function handlePartnerConnect() {
+    try {
+      setIsConnecting(true)
+      setErrorMessage('')
+      const authorizationUrl = await startPartnerOauth()
+      window.location.assign(authorizationUrl)
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(error, 'Не удалось начать подключение'),
+      )
+      setIsConnecting(false)
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -123,6 +151,43 @@ export function ApiKeyModal({ onClose }: ApiKeyModalProps) {
             </Button>
           </div>
         </form>
+
+        <div className="my-6 border-t border-slate-200" />
+
+        <section>
+          <h3 className="font-bold text-slate-900">Технический API</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Подключение нужно для первоначальной выгрузки собеседников
+            из истории сообщений.
+          </p>
+
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <span
+              className={
+                partnerStatus?.connected
+                  ? 'text-sm font-semibold text-emerald-700'
+                  : 'text-sm font-semibold text-amber-700'
+              }
+            >
+              {partnerStatus?.connected
+                ? 'Аккаунт подключён'
+                : partnerStatus?.configured
+                  ? 'Требуется авторизация'
+                  : 'Не настроен на сервере'}
+            </span>
+
+            {!partnerStatus?.connected && (
+              <Button
+                type="button"
+                disabled={!partnerStatus?.configured}
+                isLoading={isConnecting}
+                onClick={() => void handlePartnerConnect()}
+              >
+                Подключить
+              </Button>
+            )}
+          </div>
+        </section>
       </section>
     </div>
   )

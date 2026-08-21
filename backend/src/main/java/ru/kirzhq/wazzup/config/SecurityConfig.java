@@ -17,6 +17,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/settings/**",
+                                "/api/partner/oauth/callback",
+                                "/api/partner/webhook",
                                 "/api/health"
                         ).permitAll()
                         .anyRequest().authenticated()

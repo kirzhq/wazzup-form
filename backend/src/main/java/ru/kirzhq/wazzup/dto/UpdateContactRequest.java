@@ -12,10 +12,11 @@ public record UpdateContactRequest(
         )
         String name,
 
-        @NotBlank(message = "Номер телефона обязателен")
         String phone,
 
         @NotBlank(message = "Социальная сеть обязательна")
-        String chatType
+        String chatType,
+
+        String chatId
 ) {
 }
