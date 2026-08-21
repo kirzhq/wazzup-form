@@ -118,6 +118,7 @@ public class PartnerMessagesService {
                 String normalizedTransport = transport.trim().toLowerCase(Locale.ROOT);
                 if (!("max".equals(normalizedTransport)
                         || "tgapi".equals(normalizedTransport)
+                        || "telegram".equals(normalizedTransport)
                         || "whatsapp".equals(normalizedTransport))) continue;
                 String key = transport + ":" + chatId;
                 String username = field(record, "user_username", "username");
