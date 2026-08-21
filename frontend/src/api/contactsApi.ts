@@ -9,7 +9,6 @@ interface ContactsResponse {
 export interface CreateContactRequest {
   name: string
   phone: string
-  responsibleUserId: string
   chatType: 'whatsapp' | 'telegram' | 'viber' | 'max'
 }
 

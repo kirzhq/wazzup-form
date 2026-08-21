@@ -2,6 +2,7 @@ package ru.kirzhq.wazzup.controller;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import java.security.Principal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,9 +41,10 @@ public class ContactController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public WazzupContact createContact(
-            @Valid @RequestBody CreateContactRequest request
+            @Valid @RequestBody CreateContactRequest request,
+            Principal principal
     ) {
-        return contactService.createContact(request);
+        return contactService.createContact(request, principal.getName());
     }
 
     @PatchMapping("/{contactId}/name")
@@ -59,9 +61,10 @@ public class ContactController {
     @PatchMapping("/{contactId}")
     public WazzupContact updateContact(
             @PathVariable String contactId,
-            @Valid @RequestBody UpdateContactRequest request
+            @Valid @RequestBody UpdateContactRequest request,
+            Principal principal
     ) {
-        return contactService.updateContact(contactId, request);
+        return contactService.updateContact(contactId, request, principal.getName());
     }
 
     @DeleteMapping("/{contactId}")

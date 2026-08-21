@@ -255,7 +255,6 @@ export function ContactsPage() {
       await createContact({
         name: newName.trim(),
         phone: normalizePhone(newPhone),
-        responsibleUserId: user.id,
         chatType: newChatType,
       })
       setNewName('')

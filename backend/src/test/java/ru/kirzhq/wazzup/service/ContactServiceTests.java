@@ -141,7 +141,8 @@ class ContactServiceTests {
                         "+7 (999) 000-11-22",
                         "telegram",
                         null
-                )
+                ),
+                "user-2"
         );
 
         assertThat(result.name()).isEqualTo("Новое имя");
@@ -149,6 +150,7 @@ class ContactServiceTests {
                 .isEqualTo("telegram");
         assertThat(result.contactData().getFirst().phone())
                 .isEqualTo("79990001122");
+        assertThat(result.responsibleUserId()).isEqualTo("user-2");
         verify(client).saveContacts(argThat(contacts ->
                 contacts.size() == 1
                         && contacts.getFirst().id().equals("contact-1")
@@ -190,8 +192,8 @@ class ContactServiceTests {
                 ));
 
         WazzupContact created = service.createContact(new CreateContactRequest(
-                "Новый клиент", "+7 (999) 123-45-67", "user-1", "whatsapp"
-        ));
+                "Новый клиент", "+7 (999) 123-45-67", "whatsapp"
+        ), "user-1");
 
         assertThat(created.name()).isEqualTo("Новый клиент");
         verify(client).saveContacts(argThat(contacts -> {

@@ -15,9 +15,6 @@ public record CreateContactRequest(
         @NotBlank(message = "Номер телефона обязателен")
         String phone,
 
-        @NotBlank(message = "Не указан ответственный сотрудник")
-        String responsibleUserId,
-
         String chatType
 ) {
 }

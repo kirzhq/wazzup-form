@@ -66,13 +66,18 @@ public class ContactService {
         );
     }
 
-    public WazzupContact createContact(CreateContactRequest request) {
+    public WazzupContact createContact(
+            CreateContactRequest request,
+            String responsibleUserId
+    ) {
         String name = request.name().trim();
         String phone = normalizePhone(request.phone());
-        String responsibleUserId = request.responsibleUserId().trim();
         String chatType = normalizeChatType(request.chatType());
 
         validatePhone(phone);
+        if (!StringUtils.hasText(responsibleUserId)) {
+            throw new IllegalArgumentException("Не указан ответственный сотрудник");
+        }
 
         String contactId = "%013d-%s".formatted(
                 System.currentTimeMillis(),
@@ -86,7 +91,7 @@ public class ContactService {
 
         WazzupContact contact = new WazzupContact(
                 contactId,
-                responsibleUserId,
+                responsibleUserId.trim(),
                 name,
                 List.of(contactData),
                 null
@@ -371,7 +376,8 @@ public class ContactService {
 
     public WazzupContact updateContact(
             String contactId,
-            UpdateContactRequest request
+            UpdateContactRequest request,
+            String responsibleUserId
     ) {
         if (!StringUtils.hasText(contactId)) {
             throw new IllegalArgumentException(
@@ -405,7 +411,9 @@ public class ContactService {
                 : createContactData(chatType, phone);
         WazzupContact updatedContact = new WazzupContact(
                 existingContact.id(),
-                existingContact.responsibleUserId(),
+                StringUtils.hasText(responsibleUserId)
+                        ? responsibleUserId.trim()
+                        : existingContact.responsibleUserId(),
                 request.name().trim(),
                 List.of(updatedData),
                 existingContact.uri()
