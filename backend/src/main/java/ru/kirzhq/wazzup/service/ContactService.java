@@ -433,13 +433,6 @@ public class ContactService {
     }
 
     public synchronized int ensureChatContacts(List<ChatContactCandidate> candidates) {
-        return ensureChatContacts(candidates, Set.of());
-    }
-
-    public synchronized int ensureChatContacts(
-            List<ChatContactCandidate> candidates,
-            Set<String> replaceableImportedNames
-    ) {
         if (candidates == null || candidates.isEmpty()) return 0;
 
         Set<String> existingKeys = new java.util.HashSet<>();
@@ -466,12 +459,8 @@ public class ContactService {
             }
         }
 
-        WazzupUser[] users = wazzupApiClient.getUsers();
-        if (users == null || users.length == 0 || !StringUtils.hasText(users[0].id())) {
-            throw new WazzupApiException("В Wazzup нет сотрудника для новых контактов");
-        }
-
         List<WazzupContact> newContacts = new ArrayList<>();
+        String responsibleUserId = null;
         for (ChatContactCandidate candidate : candidates) {
             String chatType = candidate.chatType();
             String chatId = candidate.chatId();
@@ -490,14 +479,6 @@ public class ContactService {
             if (!isUsableImportedName(contactName, normalizedChatId, normalizedPhone)) continue;
             WazzupContact existingContact = existingByChatKey.get(chatKey);
             if (existingContact != null) {
-                if (shouldReplaceImportedName(
-                        existingContact.name(), normalizedChatId, contactName, replaceableImportedNames
-                )) {
-                    newContacts.add(new WazzupContact(
-                            existingContact.id(), existingContact.responsibleUserId(),
-                            contactName, existingContact.contactData(), existingContact.uri()
-                    ));
-                }
                 continue;
             }
             if (!normalizedPhone.isBlank() && existingKeys.contains(phoneKey)) continue;
@@ -505,9 +486,16 @@ public class ContactService {
             WazzupContact emptyContact = emptyContactsByName.remove(
                     contactName.toLowerCase(Locale.ROOT)
             );
+            if (emptyContact == null && responsibleUserId == null) {
+                WazzupUser[] users = wazzupApiClient.getUsers();
+                if (users == null || users.length == 0 || !StringUtils.hasText(users[0].id())) {
+                    throw new WazzupApiException("В Wazzup нет сотрудника для новых контактов");
+                }
+                responsibleUserId = users[0].id();
+            }
             newContacts.add(new WazzupContact(
-                emptyContact == null ? UUID.randomUUID().toString() : emptyContact.id(),
-                emptyContact == null ? users[0].id() : emptyContact.responsibleUserId(),
+                    emptyContact == null ? UUID.randomUUID().toString() : emptyContact.id(),
+                    emptyContact == null ? responsibleUserId : emptyContact.responsibleUserId(),
                 contactName,
                 List.of(new WazzupContactData(
                         normalizedType,
@@ -527,24 +515,22 @@ public class ContactService {
         return newContacts.size();
     }
 
+    public Set<String> getExistingChatKeys() {
+        Set<String> keys = new java.util.HashSet<>();
+        for (WazzupContact contact : getAllContacts()) {
+            if (contact == null || contact.contactData() == null) continue;
+            for (WazzupContactData data : contact.contactData()) {
+                if (data == null || !StringUtils.hasText(data.chatType())
+                        || !StringUtils.hasText(data.chatId())) continue;
+                keys.add(normalizeImportedChatType(data.chatType()) + ":" + data.chatId().trim());
+            }
+        }
+        return keys;
+    }
+
     private String normalizeImportedChatType(String chatType) {
         String normalized = chatType.trim().toLowerCase(Locale.ROOT);
         return "tgapi".equals(normalized) ? "telegram" : normalized;
-    }
-
-    private boolean shouldReplaceImportedName(
-            String current,
-            String chatId,
-            String candidate,
-            Set<String> replaceableImportedNames
-    ) {
-        return StringUtils.hasText(candidate)
-                && !candidate.equals(chatId)
-                && !candidate.equalsIgnoreCase(current)
-                && (!StringUtils.hasText(current)
-                || current.equals(chatId)
-                || current.chars().allMatch(Character::isDigit)
-                || replaceableImportedNames.stream().anyMatch(current::equalsIgnoreCase));
     }
 
     private boolean isUsableImportedName(String name, String chatId, String phone) {

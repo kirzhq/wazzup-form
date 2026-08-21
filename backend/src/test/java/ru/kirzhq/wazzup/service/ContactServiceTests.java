@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class ContactServiceTests {
@@ -131,6 +132,30 @@ class ContactServiceTests {
                 contacts.size() == 1
                         && contacts.getFirst().id().equals("contact-1")
         ));
+    }
+
+    @Test
+    void automaticImportNeverRenamesAnExistingContact() {
+        WazzupContact existing = new WazzupContact(
+                "contact-1",
+                "user-1",
+                "Проверенное имя",
+                List.of(new WazzupContactData(
+                        "telegram", "494628845", "litovec", "79119289893"
+                )),
+                null
+        );
+        when(client.getContactsPage(0))
+                .thenReturn(new WazzupContactsResponse(1L, List.of(existing)));
+
+        int changed = service.ensureChatContacts(List.of(
+                new ContactService.ChatContactCandidate(
+                        "telegram", "494628845", "wrong", null, "Елена"
+                )
+        ));
+
+        assertThat(changed).isZero();
+        verify(client, never()).saveContacts(org.mockito.ArgumentMatchers.anyList());
     }
 
     private WazzupContact contact(String id, String name, String phone) {

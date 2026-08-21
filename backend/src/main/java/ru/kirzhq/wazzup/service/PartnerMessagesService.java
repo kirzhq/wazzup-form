@@ -29,6 +29,7 @@ public class PartnerMessagesService {
     private static final Instant INITIAL_SYNC_START = Instant.parse("2020-01-01T00:00:00Z");
     private final PartnerOauthService oauthService;
     private final SettingsService settingsService;
+    private final PendingContactService pendingContactService;
     private final ContactService contactService;
     private final WazzupPartnerProperties properties;
     private final RestClient restClient = RestClient.builder()
@@ -36,10 +37,12 @@ public class PartnerMessagesService {
 
     public PartnerMessagesService(PartnerOauthService oauthService,
                                   SettingsService settingsService,
+                                  PendingContactService pendingContactService,
                                   ContactService contactService,
                                   WazzupPartnerProperties properties) {
         this.oauthService = oauthService;
         this.settingsService = settingsService;
+        this.pendingContactService = pendingContactService;
         this.contactService = contactService;
         this.properties = properties;
     }
@@ -86,11 +89,8 @@ public class PartnerMessagesService {
         Object url = data.get("url");
         if (url == null) throw new WazzupApiException("В готовой выгрузке отсутствует ссылка");
         int imported = importCsv(download(url.toString()));
-        if (imported == 0) {
-            throw new WazzupApiException("В выгрузке не распознаны данные собеседников");
-        }
         settingsService.completeMessagesSync(Instant.now());
-        log.info("Синхронизация собеседников Wazzup завершена, добавлено: {}", imported);
+        log.info("Выгрузка сообщений Wazzup обработана, кандидатов на проверку: {}", imported);
     }
 
     private byte[] download(String url) {
@@ -101,8 +101,7 @@ public class PartnerMessagesService {
 
     private int importCsv(byte[] bytes) throws Exception {
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
-        Map<String, TimedCandidate> inboundCandidates = new LinkedHashMap<>();
-        Map<String, TimedCandidate> outboundFallbacks = new LinkedHashMap<>();
+        Map<String, TimedCandidate> candidates = new LinkedHashMap<>();
         try (InputStreamReader reader = new InputStreamReader(
                 new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
             var parser = format.parse(reader);
@@ -120,37 +119,33 @@ public class PartnerMessagesService {
                         || "tgapi".equals(normalizedTransport)
                         || "telegram".equals(normalizedTransport)
                         || "whatsapp".equals(normalizedTransport))) continue;
-                String key = transport + ":" + chatId;
+                String key = normalizedTransport + ":" + chatId;
                 String username = field(record, "user_username", "username");
-                String contactName = inbound
-                        ? firstNonBlank(username, field(record, "user_name", "name"))
-                        : username;
-                if (contactName == null) continue;
                 ContactService.ChatContactCandidate next = new ContactService.ChatContactCandidate(
                         transport,
                         field(record, "chat_id", "recipient_chat_id", "recipient.chat_id"),
                         username,
                         field(record, "user_phone", "phone"),
-                        contactName);
+                        null);
                 Instant timestamp = parseTimestamp(field(record, "datetime", "timestamp"));
-                Map<String, TimedCandidate> target = inbound
-                        ? inboundCandidates : outboundFallbacks;
-                TimedCandidate current = target.get(key);
+                TimedCandidate current = candidates.get(key);
                 if (current == null || timestamp.isAfter(current.timestamp())) {
-                    target.put(key, new TimedCandidate(timestamp, next));
+                    candidates.put(key, new TimedCandidate(timestamp, next));
                 }
             }
         }
-        Map<String, TimedCandidate> candidates = new LinkedHashMap<>(outboundFallbacks);
-        candidates.putAll(inboundCandidates);
-        return contactService.ensureChatContacts(
-                candidates.values().stream().map(TimedCandidate::candidate).toList(),
-                Set.of("Елена")
-        );
-    }
-
-    private String firstNonBlank(String preferred, String fallback) {
-        return preferred != null && !preferred.isBlank() ? preferred : fallback;
+        Set<String> existingChatKeys = contactService.getExistingChatKeys();
+        List<ContactService.ChatContactCandidate> missing = candidates.values().stream()
+                .map(TimedCandidate::candidate)
+                .filter(candidate -> !existingChatKeys.contains(
+                        normalizeTransport(candidate.chatType()) + ":" + candidate.chatId()
+                ))
+                .toList();
+        missing.forEach(candidate -> pendingContactService.remember(
+                candidate.chatType(), candidate.chatId(), null,
+                candidate.username(), candidate.phone(), "MESSAGES_DUMP"
+        ));
+        return missing.size();
     }
 
     private Instant parseTimestamp(String value) {
@@ -160,6 +155,11 @@ public class PartnerMessagesService {
         } catch (Exception ignored) {
             return Instant.EPOCH;
         }
+    }
+
+    private String normalizeTransport(String value) {
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return "tgapi".equals(normalized) ? "telegram" : normalized;
     }
 
     public void requestSynchronization() {

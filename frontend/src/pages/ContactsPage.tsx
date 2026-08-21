@@ -15,6 +15,12 @@ import {
 } from '../api/contactsApi'
 import { getApiErrorMessage } from '../api/getApiErrorMessage'
 import { logout } from '../api/authApi'
+import {
+  approvePendingContact,
+  dismissPendingContact,
+  getPendingContacts,
+  type PendingContact,
+} from '../api/partnerApi'
 import { Alert } from '../components/ui/Alert/Alert'
 import { ApiKeyModal } from '../components/ApiKeyModal'
 import { Button } from '../components/ui/Button/Button'
@@ -90,6 +96,8 @@ export function ContactsPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [pendingContacts, setPendingContacts] = useState<PendingContact[]>([])
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [hiddenNetworks, setHiddenNetworks] = useState<Set<string>>(
     () => new Set(),
   )
@@ -159,7 +167,41 @@ export function ContactsPage() {
 
   useEffect(() => {
     void loadContacts()
+    void getPendingContacts().then(setPendingContacts).catch(() => undefined)
   }, [loadContacts])
+
+  async function handleApprovePending(candidate: PendingContact) {
+    const suggestedName = candidate.name ?? candidate.username ?? ''
+    const name = window.prompt(
+      'Проверьте имя перед созданием контакта',
+      suggestedName,
+    )?.trim()
+    if (!name) return
+    try {
+      setPendingActionId(candidate.id)
+      setError('')
+      await approvePendingContact(candidate.id, name)
+      setPendingContacts(await getPendingContacts())
+      await loadContacts(activeSearch)
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Не удалось подтвердить контакт'))
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  async function handleDismissPending(candidate: PendingContact) {
+    try {
+      setPendingActionId(candidate.id)
+      setError('')
+      await dismissPendingContact(candidate.id)
+      setPendingContacts(await getPendingContacts())
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Не удалось отклонить контакт'))
+    } finally {
+      setPendingActionId(null)
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -437,6 +479,59 @@ export function ContactsPage() {
           <div className="mb-5">
             <Alert variant="error">{error}</Alert>
           </div>
+        )}
+
+        {pendingContacts.length > 0 && (
+          <Card className="mb-5 border border-amber-200 bg-amber-50">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-slate-900">
+                Требуют проверки: {pendingContacts.length}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Эти данные найдены в сообщениях, но не будут автоматически
+                изменять контакты Wazzup.
+              </p>
+            </div>
+            <div className="grid gap-3">
+              {pendingContacts.map((candidate) => (
+                <div
+                  key={candidate.id}
+                  className="rounded-2xl border border-amber-200 bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {candidate.name ?? candidate.username ?? 'Имя не определено'}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {candidate.chatType} · ID {candidate.chatId}
+                        {candidate.phone
+                          ? ` · ${formatPhone(candidate.phone)}`
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        disabled={pendingActionId === candidate.id}
+                        onClick={() => void handleApprovePending(candidate)}
+                      >
+                        Проверить и добавить
+                      </Button>
+                      <Button
+                        type="button"
+                        className="bg-slate-500 hover:bg-slate-600"
+                        disabled={pendingActionId === candidate.id}
+                        onClick={() => void handleDismissPending(candidate)}
+                      >
+                        Скрыть
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
         )}
 
         <Card className="overflow-hidden p-0">
