@@ -29,6 +29,11 @@ public class AuthController {
     ) {
         LoginResponse user = authService.login(request.phone());
 
+        HttpSession existingSession = httpRequest.getSession(false);
+        if (existingSession != null) {
+            httpRequest.changeSessionId();
+        }
+
         UsernamePasswordAuthenticationToken authentication =
                 UsernamePasswordAuthenticationToken.authenticated(
                         user.id(),

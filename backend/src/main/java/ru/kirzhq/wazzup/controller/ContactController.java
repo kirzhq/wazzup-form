@@ -19,9 +19,12 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import ru.kirzhq.wazzup.dto.RenameContactRequest;
 import ru.kirzhq.wazzup.dto.UpdateContactRequest;
+import jakarta.validation.constraints.Size;
+import org.springframework.validation.annotation.Validated;
 
 @RestController
 @RequestMapping("/api/contacts")
+@Validated
 public class ContactController {
 
     private final ContactService contactService;
@@ -32,8 +35,10 @@ public class ContactController {
 
     @GetMapping
     public WazzupContactsResponse getContacts(
-            @RequestParam(required = false) String name,
-            @RequestParam(required = false) String phone
+            @RequestParam(required = false)
+            @Size(max = 200, message = "Строка поиска по имени слишком длинная") String name,
+            @RequestParam(required = false)
+            @Size(max = 40, message = "Строка поиска по телефону слишком длинная") String phone
     ) {
         return contactService.getContacts(name, phone);
     }

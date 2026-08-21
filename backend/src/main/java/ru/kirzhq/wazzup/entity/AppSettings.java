@@ -10,7 +10,7 @@ public class AppSettings {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "api_key", nullable = false)
+    @Column(name = "api_key", nullable = false, length = 4096)
     private String apiKey;
 
     @Column(name = "partner_access_token", length = 4096)

@@ -6,6 +6,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 import ru.kirzhq.wazzup.config.WazzupPartnerProperties;
+import ru.kirzhq.wazzup.client.WazzupRestClientFactory;
 import ru.kirzhq.wazzup.dto.OauthStartResponse;
 import ru.kirzhq.wazzup.dto.PartnerStatusResponse;
 import ru.kirzhq.wazzup.dto.PartnerTokenData;
@@ -38,9 +39,9 @@ public class PartnerOauthService {
         this.properties = properties;
         this.settingsService = settingsService;
         this.encryptionService = encryptionService;
-        this.restClient = RestClient.builder()
-                .baseUrl("https://tech.wazzup24.com/v2")
-                .build();
+        this.restClient = WazzupRestClientFactory.create(
+                "https://tech.wazzup24.com/v2"
+        );
     }
 
     public PartnerStatusResponse getStatus() {

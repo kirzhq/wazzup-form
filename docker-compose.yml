@@ -13,9 +13,15 @@ services:
       WAZZUP_OAUTH_REDIRECT_URI: ${WAZZUP_OAUTH_REDIRECT_URI:-http://127.0.0.1:8080/api/partner/oauth/callback}
       WAZZUP_TOKEN_ENCRYPTION_KEY: ${WAZZUP_TOKEN_ENCRYPTION_KEY:-}
       WAZZUP_WEBHOOK_URL: ${WAZZUP_WEBHOOK_URL:-}
+      WAZZUP_WEBHOOK_SECRET: ${WAZZUP_WEBHOOK_SECRET:-}
       WAZZUP_SYNC_ENABLED: ${WAZZUP_SYNC_ENABLED:-false}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     volumes:
       - wazzup_sqlite_data:/data
+    read_only: true
+    tmpfs:
+      # SQLite JDBC распаковывает нативную библиотеку в /tmp и загружает её.
+      - /tmp:rw,exec,nosuid,size=64m,mode=1777
     restart: unless-stopped
 
   frontend:
@@ -24,7 +30,8 @@ services:
     ports:
       - "${APP_PORT:-8080}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

@@ -10,13 +10,17 @@ import org.springframework.web.client.RestClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.kirzhq.wazzup.config.WazzupPartnerProperties;
+import ru.kirzhq.wazzup.client.WazzupRestClientFactory;
 import ru.kirzhq.wazzup.entity.ProcessedWebhook;
 import ru.kirzhq.wazzup.repository.ProcessedWebhookRepository;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class PartnerWebhookService {
@@ -27,9 +31,9 @@ public class PartnerWebhookService {
     private final PendingContactService pendingContactService;
     private final ProcessedWebhookRepository processedWebhookRepository;
     private final TaskExecutor taskExecutor;
-    private final RestClient restClient = RestClient.builder()
-            .baseUrl("https://tech.wazzup24.com/v2")
-            .build();
+    private final RestClient restClient = WazzupRestClientFactory.create(
+            "https://tech.wazzup24.com/v2"
+    );
 
     public PartnerWebhookService(
             PartnerOauthService oauthService,
@@ -49,16 +53,19 @@ public class PartnerWebhookService {
 
     @Scheduled(initialDelay = 5_000, fixedDelay = 21_600_000)
     public void ensureSubscriptions() {
-        if (!properties.hasWebhookUrl() || !oauthService.getStatus().connected()) return;
+        if (!properties.hasWebhookUrl()
+                || !properties.hasWebhookSecret()
+                || !oauthService.getStatus().connected()) return;
         try {
+            String webhookUrl = securedWebhookUrl();
             Map<?, ?> response = restClient.get()
                     .uri("/webhooks")
                     .headers(headers -> headers.setBearerAuth(oauthService.getAccessToken()))
                     .retrieve().body(Map.class);
             List<?> subscriptions = response != null && response.get("data") instanceof List<?> list
                     ? list : List.of();
-            ensureSubscription(subscriptions, "message.add");
-            ensureSubscription(subscriptions, "messages_dump.status_update");
+            ensureSubscription(subscriptions, webhookUrl, "message.add");
+            ensureSubscription(subscriptions, webhookUrl, "messages_dump.status_update");
         } catch (Exception exception) {
             log.warn("Не удалось настроить вебхуки Wazzup: {}", exception.getMessage());
         }
@@ -69,23 +76,43 @@ public class PartnerWebhookService {
         processedWebhookRepository.deleteByProcessedAtBefore(Instant.now().minusSeconds(2_592_000));
     }
 
-    private void ensureSubscription(List<?> subscriptions, String event) {
+    private void ensureSubscription(
+            List<?> subscriptions,
+            String webhookUrl,
+            String event
+    ) {
         boolean exists = subscriptions.stream()
                 .filter(Map.class::isInstance)
                 .map(Map.class::cast)
                 .anyMatch(item -> event.equals(item.get("event"))
-                        && properties.webhookUrl().equals(item.get("url")));
+                        && webhookUrl.equals(item.get("url")));
         if (exists) return;
 
         restClient.post().uri("/webhooks")
                 .headers(headers -> headers.setBearerAuth(oauthService.getAccessToken()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("data", List.of(Map.of(
-                        "url", properties.webhookUrl(),
+                        "url", webhookUrl,
                         "event", event
                 ))))
                 .retrieve().toBodilessEntity();
-        log.info("Создана подписка Wazzup: {} -> {}", event, properties.webhookUrl());
+        log.info("Создана подписка Wazzup на событие {}", event);
+    }
+
+    public boolean isAuthorized(String suppliedToken) {
+        if (!properties.hasWebhookSecret() || suppliedToken == null) return false;
+        return MessageDigest.isEqual(
+                properties.webhookSecret().getBytes(StandardCharsets.UTF_8),
+                suppliedToken.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private String securedWebhookUrl() {
+        return UriComponentsBuilder.fromUriString(properties.webhookUrl())
+                .replaceQueryParam("token", properties.webhookSecret())
+                .build()
+                .encode()
+                .toUriString();
     }
 
     public void accept(Map<String, Object> payload) {

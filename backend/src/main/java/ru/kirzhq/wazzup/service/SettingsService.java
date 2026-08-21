@@ -9,30 +9,55 @@ import java.time.Instant;
 
 @Service
 public class SettingsService {
+    private static final String ENCRYPTED_PREFIX = "enc:v1:";
 
     private final AppSettingsRepository repository;
+    private final SecretEncryptionService encryptionService;
 
-    public SettingsService(AppSettingsRepository repository) {
+    public SettingsService(
+            AppSettingsRepository repository,
+            SecretEncryptionService encryptionService
+    ) {
         this.repository = repository;
+        this.encryptionService = encryptionService;
     }
 
     @Transactional
     public void saveApiKey(String apiKey) {
         String normalizedApiKey = apiKey.trim();
+        String encryptedApiKey = ENCRYPTED_PREFIX
+                + encryptionService.encrypt(normalizedApiKey);
 
         AppSettings settings = repository.findFirstByOrderByIdAsc()
-                .orElseGet(() -> new AppSettings(apiKey));
+                .orElseGet(() -> new AppSettings(encryptedApiKey));
 
-        settings.setApiKey(normalizedApiKey);
+        settings.setApiKey(encryptedApiKey);
         repository.save(settings);
     }
 
     public boolean isConfigured() {
-        return repository.count() > 0;
+        return repository.findFirstByOrderByIdAsc()
+                .map(AppSettings::getApiKey)
+                .filter(value -> !value.isBlank())
+                .isPresent();
     }
 
+    @Transactional
     public String getApiKey() {
-        return getSettings().getApiKey();
+        AppSettings settings = getSettings();
+        String storedApiKey = settings.getApiKey();
+        if (storedApiKey.startsWith(ENCRYPTED_PREFIX)) {
+            return encryptionService.decrypt(
+                    storedApiKey.substring(ENCRYPTED_PREFIX.length())
+            );
+        }
+
+        // Миграция существующих установок: старые версии сохраняли ключ открытым текстом.
+        String encryptedApiKey = ENCRYPTED_PREFIX
+                + encryptionService.encrypt(storedApiKey);
+        settings.setApiKey(encryptedApiKey);
+        repository.save(settings);
+        return storedApiKey;
     }
 
     public AppSettings getSettings() {

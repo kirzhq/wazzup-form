@@ -26,6 +26,7 @@ import { ApiKeyModal } from '../components/ApiKeyModal'
 import { Button } from '../components/ui/Button/Button'
 import { Card } from '../components/ui/Card/Card'
 import { Input } from '../components/ui/Input/Input'
+import { SettingsIcon } from '../components/icons/SettingsIcon'
 import type { Contact } from '../types/contact'
 import {
   getAuthUser,
@@ -38,6 +39,24 @@ import {
 
 type PhoneChatType = 'whatsapp' | 'telegram' | 'viber' | 'max'
 type ContactSort = 'newest' | 'name-asc' | 'name-desc'
+const INITIAL_CONTACT_MESSAGE = 'Здравствуйте! '
+
+function SelectChevron() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-slate-500"
+      aria-hidden="true"
+    >
+      <path d="m6 8 4 4 4-4" />
+    </svg>
+  )
+}
 
 function getContactPhone(contact: Contact): string {
   const contactData = contact.contactData ?? []
@@ -103,6 +122,7 @@ export function ContactsPage() {
   const [hiddenNetworks, setHiddenNetworks] = useState<Set<string>>(
     () => new Set(),
   )
+  const [showNetworkFilter, setShowNetworkFilter] = useState(false)
   const [contactSort, setContactSort] = useState<ContactSort>('newest')
 
   const availableNetworks = useMemo(() => Array.from(new Set(
@@ -110,6 +130,9 @@ export function ContactsPage() {
       .flatMap(getContactNetworks)
       .filter((network): network is string => Boolean(network)),
   )).sort((left, right) => left.localeCompare(right, 'ru')), [contacts])
+
+  const selectedNetworkCount = availableNetworks.length
+    - availableNetworks.filter((network) => hiddenNetworks.has(network)).length
 
   const displayedContacts = useMemo(() => {
     const filtered = hiddenNetworks.size === 0
@@ -144,6 +167,8 @@ export function ContactsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
+  const [newMessage, setNewMessage] = useState(INITIAL_CONTACT_MESSAGE)
+  const [newMessageError, setNewMessageError] = useState('')
   const [newChatType, setNewChatType] =
     useState<PhoneChatType>('whatsapp')
   const [isCreating, setIsCreating] = useState(false)
@@ -253,6 +278,14 @@ export function ContactsPage() {
       return
     }
 
+    const message = newMessage.trim()
+    if (!message) {
+      setNewMessageError(
+        'Введите первое сообщение — без него создать контакт невозможно',
+      )
+      return
+    }
+
     try {
       setIsCreating(true)
       setError('')
@@ -261,14 +294,17 @@ export function ContactsPage() {
         name: newName.trim(),
         phone: normalizePhone(newPhone),
         chatType: newChatType,
+        message,
       })
       setNewName('')
       setNewPhone('')
       setNewChatType('whatsapp')
+      setNewMessage(INITIAL_CONTACT_MESSAGE)
+      setNewMessageError('')
       setShowCreateForm(false)
       await loadContacts(activeSearch)
       setNotice(
-        'Контакт и чат созданы в Wazzup. Первое сообщение «Здравствуйте!» отправлено.',
+        'Контакт и чат созданы в Wazzup. Первое сообщение отправлено.',
       )
     } catch (requestError) {
       setError(
@@ -373,28 +409,51 @@ export function ContactsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
+            aria-label="Действия пользователя"
+          >
             <button
               type="button"
               aria-label="Настройки API-ключа"
               title="Настройки"
               className="
-                grid size-12 place-items-center rounded-xl bg-white
-                text-xl text-slate-600 shadow-sm transition
-                hover:text-violet-600 focus:outline-none
-                focus:ring-4 focus:ring-violet-100
+                inline-flex h-12 items-center justify-center gap-2 rounded-xl px-4
+                text-sm font-semibold text-slate-700 transition
+                hover:bg-violet-50 hover:text-violet-700
+                focus:outline-none focus:ring-4 focus:ring-violet-100
               "
               onClick={() => setShowSettings(true)}
             >
-              ⚙
+              <SettingsIcon className="size-5" />
+              <span>Настройки</span>
             </button>
-            <Button
+            <button
               type="button"
-              className="bg-slate-700 hover:bg-slate-800"
+              className="
+                inline-flex h-12 items-center justify-center gap-2 rounded-xl px-4
+                text-sm font-semibold text-slate-700 transition
+                hover:bg-violet-50 hover:text-violet-700
+                focus:outline-none focus:ring-4 focus:ring-violet-100
+              "
               onClick={() => void handleLogout()}
             >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-5"
+                aria-hidden="true"
+              >
+                <path d="M10 17l5-5-5-5" />
+                <path d="M15 12H3" />
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              </svg>
               Выйти
-            </Button>
+            </button>
           </div>
         </header>
 
@@ -510,11 +569,11 @@ export function ContactsPage() {
           <Card className="mb-5 border border-amber-200 bg-amber-50">
             <div className="mb-4">
               <h2 className="text-lg font-bold text-slate-900">
-                Требуют проверки: {pendingContacts.length}
+                Новые собеседники без контакта: {pendingContacts.length}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                Эти данные найдены в сообщениях, но не будут автоматически
-                изменять контакты Wazzup.
+                Они найдены в технической выгрузке сообщений, но для них нет
+                карточки контакта с достоверным именем.
               </p>
             </div>
             <div className="grid gap-3">
@@ -534,6 +593,14 @@ export function ContactsPage() {
                           ? ` · ${formatPhone(candidate.phone)}`
                           : ''}
                       </p>
+                      {candidate.lastActivityAt && (
+                        <p className="mt-1 text-xs text-slate-400">
+                          Последняя активность:{' '}
+                          {new Date(candidate.lastActivityAt).toLocaleString(
+                            'ru-RU',
+                          )}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -559,7 +626,7 @@ export function ContactsPage() {
           </Card>
         )}
 
-        <Card className="overflow-hidden p-0">
+        <Card className="p-0">
           <div
             className="
               flex flex-wrap items-center justify-between gap-3
@@ -573,33 +640,95 @@ export function ContactsPage() {
             <div className="flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <span>Сортировка</span>
-                <select
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2"
-                  value={contactSort}
-                  onChange={(event) => setContactSort(event.target.value as ContactSort)}
-                >
-                  <option value="newest">Сначала новые</option>
-                  <option value="name-asc">От А до Я</option>
-                  <option value="name-desc">От Я до А</option>
-                </select>
+                <span className="relative">
+                  <select
+                    className="appearance-none rounded-xl border border-slate-300 bg-white py-2 pl-3 pr-11 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                    value={contactSort}
+                    onChange={(event) => setContactSort(event.target.value as ContactSort)}
+                  >
+                    <option value="newest">Сначала новые</option>
+                    <option value="name-asc">От А до Я</option>
+                    <option value="name-desc">От Я до А</option>
+                  </select>
+                  <SelectChevron />
+                </span>
               </label>
-            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <legend className="sr-only">Фильтр по социальной сети</legend>
-              {availableNetworks.map((network) => (
-                <label
-                  key={network}
-                  className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
-                >
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-violet-600"
-                    checked={!hiddenNetworks.has(network)}
-                    onChange={() => toggleNetwork(network)}
-                  />
-                  {network}
-                </label>
-              ))}
-            </fieldset>
+              <div
+                className="flex items-center gap-2 text-sm text-slate-700"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setShowNetworkFilter(false)
+                }}
+              >
+                <span>Мессенджеры</span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-haspopup="true"
+                    aria-expanded={showNetworkFilter}
+                    disabled={availableNetworks.length === 0}
+                    className="relative min-w-40 rounded-xl border border-slate-300 bg-white py-2 pl-3 pr-11 text-left font-medium outline-none transition hover:border-violet-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                    onClick={() => setShowNetworkFilter((current) => !current)}
+                  >
+                    {selectedNetworkCount === availableNetworks.length
+                      ? 'Все'
+                      : `Выбрано: ${selectedNetworkCount}`}
+                    <SelectChevron />
+                  </button>
+
+                  {showNetworkFilter && (
+                    <>
+                      <button
+                        type="button"
+                        className="fixed inset-0 z-20 cursor-default"
+                        aria-label="Закрыть фильтр мессенджеров"
+                        onClick={() => setShowNetworkFilter(false)}
+                      />
+                      <fieldset className="absolute right-0 z-30 mt-2 min-w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70">
+                        <legend className="sr-only">
+                          Фильтр по мессенджерам
+                        </legend>
+                        {availableNetworks.map((network) => (
+                          <label
+                            key={network}
+                            className="group flex cursor-pointer select-none items-center gap-3 rounded-xl px-3 py-2.5 font-medium text-slate-700 transition hover:bg-violet-50"
+                          >
+                            <input
+                              type="checkbox"
+                              className="peer sr-only"
+                              checked={!hiddenNetworks.has(network)}
+                              onChange={() => toggleNetwork(network)}
+                            />
+                            <span className="grid size-5 shrink-0 place-items-center rounded-md border-2 border-slate-300 bg-white text-white transition group-hover:border-violet-400 peer-checked:border-violet-600 peer-checked:bg-violet-600 peer-focus-visible:ring-4 peer-focus-visible:ring-violet-100">
+                              <svg
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="size-3.5"
+                                aria-hidden="true"
+                              >
+                                <path d="m3 8 3 3 7-7" />
+                              </svg>
+                            </span>
+                            <span className="capitalize">{network}</span>
+                          </label>
+                        ))}
+                        {hiddenNetworks.size > 0 && (
+                          <button
+                            type="button"
+                            className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-violet-700 transition hover:bg-violet-50"
+                            onClick={() => setHiddenNetworks(new Set())}
+                          >
+                            Выбрать все
+                          </button>
+                        )}
+                      </fieldset>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           {isLoading ? (
@@ -611,7 +740,7 @@ export function ContactsPage() {
                 : 'Список контактов пуст.'}
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-b-3xl">
               <table className="w-full min-w-[720px]">
                 <thead className="bg-slate-50 text-sm text-slate-600">
                   <tr>
@@ -804,29 +933,71 @@ export function ContactsPage() {
                 >
                   Социальная сеть
                 </label>
-                <select
-                  id="new-contact-chat-type"
-                  className="
-                    h-12 w-full rounded-xl border border-slate-300
-                    bg-white px-4 text-slate-900 outline-none transition
-                    focus:border-violet-500 focus:ring-4 focus:ring-violet-100
-                  "
-                  value={newChatType}
-                  disabled={isCreating}
-                  onChange={(event) =>
-                    setNewChatType(event.target.value as PhoneChatType)}
-                >
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="telegram">Telegram</option>
-                  <option value="viber">Viber</option>
-                  <option value="max">MAX</option>
-                </select>
+                <div className="relative">
+                  <select
+                    id="new-contact-chat-type"
+                    className="
+                      h-12 w-full appearance-none rounded-xl border border-slate-300
+                      bg-white pl-4 pr-12 text-slate-900 outline-none transition
+                      focus:border-violet-500 focus:ring-4 focus:ring-violet-100
+                    "
+                    value={newChatType}
+                    disabled={isCreating}
+                    onChange={(event) =>
+                      setNewChatType(event.target.value as PhoneChatType)}
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="viber">Viber</option>
+                    <option value="max">MAX</option>
+                  </select>
+                  <SelectChevron />
+                </div>
               </div>
 
-              <Alert variant="info">
-                После создания контакта приложение отправит первое сообщение
-                «Здравствуйте!», чтобы диалог появился в Wazzup.
-              </Alert>
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="new-contact-message"
+                  className="text-sm font-semibold text-slate-800"
+                >
+                  Первое сообщение
+                </label>
+                <textarea
+                  id="new-contact-message"
+                  className={`
+                    min-h-28 w-full resize-y rounded-xl border bg-white px-4 py-3
+                    text-slate-900 outline-none transition
+                    focus:ring-4
+                    ${newMessageError
+                      ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
+                      : 'border-slate-300 focus:border-violet-500 focus:ring-violet-100'}
+                  `}
+                  value={newMessage}
+                  maxLength={4000}
+                  disabled={isCreating}
+                  aria-required="true"
+                  placeholder="Введите сообщение, которое получит клиент"
+                  aria-invalid={Boolean(newMessageError)}
+                  aria-describedby={newMessageError
+                    ? 'new-contact-message-error'
+                    : undefined}
+                  onChange={(event) => {
+                    setNewMessage(event.target.value)
+                    setNewMessageError('')
+                  }}
+                />
+                {newMessageError && (
+                  <p
+                    id="new-contact-message-error"
+                    className="text-sm font-medium text-red-600"
+                  >
+                    {newMessageError}
+                  </p>
+                )}
+                <p className="text-xs leading-5 text-slate-500">
+                  Сообщение будет отправлено сразу, чтобы чат появился в Wazzup.
+                </p>
+              </div>
 
               <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Button
@@ -923,23 +1094,26 @@ export function ContactsPage() {
                 >
                   Социальная сеть
                 </label>
-                <select
-                  id="edit-contact-chat-type"
-                  className="
-                    h-12 w-full rounded-xl border border-slate-300
-                    bg-white px-4 text-slate-900 outline-none transition
-                    focus:border-violet-500 focus:ring-4 focus:ring-violet-100
-                  "
-                  value={editingChatType}
-                  disabled={isEditing}
-                  onChange={(event) =>
-                    setEditingChatType(event.target.value as PhoneChatType)}
-                >
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="telegram">Telegram</option>
-                  <option value="viber">Viber</option>
-                  <option value="max">MAX</option>
-                </select>
+                <div className="relative">
+                  <select
+                    id="edit-contact-chat-type"
+                    className="
+                      h-12 w-full appearance-none rounded-xl border border-slate-300
+                      bg-white pl-4 pr-12 text-slate-900 outline-none transition
+                      focus:border-violet-500 focus:ring-4 focus:ring-violet-100
+                    "
+                    value={editingChatType}
+                    disabled={isEditing}
+                    onChange={(event) =>
+                      setEditingChatType(event.target.value as PhoneChatType)}
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="viber">Viber</option>
+                    <option value="max">MAX</option>
+                  </select>
+                  <SelectChevron />
+                </div>
               </div>
 
               <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

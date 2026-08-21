@@ -37,6 +37,9 @@ public class PendingContactCandidate {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "last_activity_at")
+    private Instant lastActivityAt;
+
     public PendingContactCandidate() {}
 
     public String getId() { return id; }
@@ -57,4 +60,6 @@ public class PendingContactCandidate {
     public void setStatus(String status) { this.status = status; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public Instant getLastActivityAt() { return lastActivityAt; }
+    public void setLastActivityAt(Instant lastActivityAt) { this.lastActivityAt = lastActivityAt; }
 }

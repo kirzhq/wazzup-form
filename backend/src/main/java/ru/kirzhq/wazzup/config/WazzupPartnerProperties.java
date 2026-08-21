@@ -10,6 +10,7 @@ public record WazzupPartnerProperties(
         String redirectUri,
         String encryptionKey,
         String webhookUrl,
+        String webhookSecret,
         boolean syncEnabled
 ) {
     public boolean isConfigured() {
@@ -26,5 +27,9 @@ public record WazzupPartnerProperties(
 
     public boolean hasWebhookUrl() {
         return hasText(webhookUrl);
+    }
+
+    public boolean hasWebhookSecret() {
+        return hasText(webhookSecret);
     }
 }

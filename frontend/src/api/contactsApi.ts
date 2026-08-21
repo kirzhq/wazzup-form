@@ -10,6 +10,7 @@ export interface CreateContactRequest {
   name: string
   phone: string
   chatType: 'whatsapp' | 'telegram' | 'viber' | 'max'
+  message: string
 }
 
 export interface ContactSearch {

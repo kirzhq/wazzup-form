@@ -14,6 +14,7 @@ export interface PendingContact {
   phone: string | null
   source: string
   updatedAt: string
+  lastActivityAt: string | null
 }
 
 interface OauthStartResponse {

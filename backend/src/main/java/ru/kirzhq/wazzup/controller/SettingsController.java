@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.kirzhq.wazzup.dto.ApiKeyRequest;
 import ru.kirzhq.wazzup.service.SettingsService;
 
+import java.security.Principal;
 import java.util.Map;
 
 @RestController
@@ -27,8 +28,14 @@ public class SettingsController {
 
     @PutMapping("/api-key")
     public Map<String, String> saveApiKey(
-            @Valid @RequestBody ApiKeyRequest request
+            @Valid @RequestBody ApiKeyRequest request,
+            Principal principal
     ) {
+        if (settingsService.isConfigured() && principal == null) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Изменение API-ключа доступно только после входа"
+            );
+        }
         settingsService.saveApiKey(request.apiKey());
 
         return Map.of(

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
@@ -125,6 +126,27 @@ class ContactServiceTests {
     }
 
     @Test
+    void returnsOnlyContactsLinkedToSupportedChats() {
+        WazzupContact linked = contact("id-1", "Клиент", "79991234567");
+        WazzupContact empty = new WazzupContact(
+                "id-2", "user-1", "Пустая карточка", List.of(), null
+        );
+        WazzupContact withoutChatId = new WazzupContact(
+                "id-3", "Без чата", "user-1",
+                List.of(new WazzupContactData("telegram", null, "username", null)),
+                null
+        );
+        when(client.getContactsPage(0)).thenReturn(
+                new WazzupContactsResponse(3L, List.of(linked, empty, withoutChatId))
+        );
+
+        WazzupContactsResponse response = service.getContacts(null, null);
+
+        assertThat(response.count()).isEqualTo(1);
+        assertThat(response.data()).containsExactly(linked);
+    }
+
+    @Test
     void deletesContactById() {
         service.deleteContact(" contact-1 ");
 
@@ -200,16 +222,38 @@ class ContactServiceTests {
                 ));
 
         WazzupContact created = service.createContact(new CreateContactRequest(
-                "Новый клиент", "+7 (999) 123-45-67", "whatsapp"
+                "Новый клиент", "+7 (999) 123-45-67", "whatsapp",
+                "Здравствуйте! Подскажите, пожалуйста, удобное время."
         ), "user-1");
 
         assertThat(created.name()).isEqualTo("Новый клиент");
+        verify(client).sendMessage(argThat(request ->
+                request.text().equals(
+                        "Здравствуйте! Подскажите, пожалуйста, удобное время."
+                )
+        ));
         verify(client, atLeastOnce()).saveContacts(argThat(contacts -> {
             WazzupContact contact = contacts.getFirst();
             return contact.responsibleUserId().equals("user-1")
                     && contact.contactData().getFirst().chatType().equals("whatsapp")
                     && contact.contactData().getFirst().chatId().equals("79991234567");
         }));
+    }
+
+    @Test
+    void rejectsContactWithoutInitialMessage() {
+        assertThatThrownBy(() -> service.createContact(new CreateContactRequest(
+                "Новый клиент", "+7 (999) 123-45-67", "whatsapp", "   "
+        ), "user-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Без первого сообщения создать контакт невозможно");
+
+        verify(client, never()).sendMessage(
+                org.mockito.ArgumentMatchers.any()
+        );
+        verify(client, never()).saveContacts(
+                org.mockito.ArgumentMatchers.anyList()
+        );
     }
 
     private WazzupContact contact(String id, String name, String phone) {

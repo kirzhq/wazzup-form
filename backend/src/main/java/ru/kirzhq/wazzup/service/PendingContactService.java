@@ -57,6 +57,35 @@ public class PendingContactService {
         repository.save(candidate);
     }
 
+    @Transactional
+    public void rememberFromDump(
+            String chatType,
+            String chatId,
+            String username,
+            String phone,
+            Instant lastActivityAt
+    ) {
+        if (!StringUtils.hasText(chatType) || !StringUtils.hasText(chatId)) return;
+        String normalizedType = normalizeChatType(chatType);
+        String normalizedChatId = chatId.trim();
+        var existing = repository.findByChatTypeAndChatId(normalizedType, normalizedChatId);
+        PendingContactCandidate candidate = existing.orElseGet(() -> {
+            PendingContactCandidate created = new PendingContactCandidate();
+            created.setId(UUID.randomUUID().toString());
+            created.setChatType(normalizedType);
+            created.setChatId(normalizedChatId);
+            created.setStatus(PENDING);
+            return created;
+        });
+        candidate.setName(null);
+        candidate.setUsername(normalizeText(username));
+        candidate.setPhone(normalizePhone(phone));
+        candidate.setSource("MESSAGES_DUMP");
+        candidate.setLastActivityAt(lastActivityAt);
+        candidate.setUpdatedAt(Instant.now());
+        repository.save(candidate);
+    }
+
     public List<PendingContactResponse> getPending() {
         return repository.findAllByStatusOrderByUpdatedAtDesc(PENDING).stream()
                 .map(this::toResponse)
@@ -92,7 +121,8 @@ public class PendingContactService {
     private PendingContactResponse toResponse(PendingContactCandidate value) {
         return new PendingContactResponse(
                 value.getId(), value.getChatType(), value.getChatId(), value.getName(),
-                value.getUsername(), value.getPhone(), value.getSource(), value.getUpdatedAt()
+                value.getUsername(), value.getPhone(), value.getSource(), value.getUpdatedAt(),
+                value.getLastActivityAt()
         );
     }
 
@@ -109,5 +139,9 @@ public class PendingContactService {
 
     private String prefer(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;
+    }
+
+    private String normalizeText(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

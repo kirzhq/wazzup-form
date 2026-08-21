@@ -13,8 +13,14 @@ public record CreateContactRequest(
         String name,
 
         @NotBlank(message = "Номер телефона обязателен")
+        @Size(max = 40, message = "Номер телефона слишком длинный")
         String phone,
 
-        String chatType
+        @Size(max = 20, message = "Тип мессенджера слишком длинный")
+        String chatType,
+
+        @NotBlank(message = "Без первого сообщения создать контакт невозможно")
+        @Size(max = 4000, message = "Сообщение не должно превышать 4000 символов")
+        String message
 ) {
 }

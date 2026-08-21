@@ -93,8 +93,8 @@ export function ApiKeyModal({ onClose }: ApiKeyModalProps) {
               Настройки Wazzup
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Введите новый API-ключ. Текущий ключ останется активным,
-              если закрыть окно без сохранения.
+              Здесь можно заменить ключ доступа к API Wazzup и проверить
+              подключение технической интеграции.
             </p>
           </div>
           <button
@@ -157,8 +157,8 @@ export function ApiKeyModal({ onClose }: ApiKeyModalProps) {
         <section>
           <h3 className="font-bold text-slate-900">Технический API</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Подключение нужно для первоначальной выгрузки собеседников
-            из истории сообщений.
+            Загружает собеседников из переписок и помогает поддерживать
+            список контактов актуальным по новым сообщениям.
           </p>
 
           <div className="mt-4 flex items-center justify-between gap-4">

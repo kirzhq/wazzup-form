@@ -13,6 +13,7 @@ import { Alert } from '../components/ui/Alert/Alert'
 import { Button } from '../components/ui/Button/Button'
 import { Card } from '../components/ui/Card/Card'
 import { Input } from '../components/ui/Input/Input'
+import { SettingsIcon } from '../components/icons/SettingsIcon'
 import { AuthLayout } from '../layouts/AuthLayout'
 import {
   getLastPhone,
@@ -81,13 +82,14 @@ export function LoginPage() {
           aria-label="Настройки API-ключа"
           title="Настройки"
           className="
-            absolute right-5 top-5 z-10 grid size-10 place-items-center
-            rounded-xl text-xl text-slate-500 transition
-            hover:bg-slate-100 hover:text-violet-600
+            absolute right-5 top-5 z-10 grid size-12 place-items-center
+            rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600
+            text-white shadow-lg shadow-violet-200 transition
+            hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-200
             focus:outline-none focus:ring-4 focus:ring-violet-100
           "
         >
-          ⚙
+          <SettingsIcon className="size-6" />
         </Link>
 
         <Card>

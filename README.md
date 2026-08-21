@@ -1,9 +1,10 @@
 # Wazzup Contacts
 
-Веб-приложение для управления контактами Wazzup и автоматического создания
-контактов из существующих переписок. Сотрудник входит по номеру телефона,
-просматривает полный список, выполняет поиск, добавляет, редактирует и удаляет
-контакты.
+Веб-приложение для управления собеседниками Wazzup. В рамках приложения
+контактом считается пользователь, с которым существует личный чат в WhatsApp,
+Telegram, MAX или Viber. Пустые CRM-карточки без `chat_id` в список не попадают.
+Сотрудник входит по номеру телефона, выполняет поиск, добавляет, редактирует и
+удаляет контакты.
 
 Приложение работает с двумя интерфейсами Wazzup:
 
@@ -19,6 +20,7 @@
 - настройка API-ключа Wazzup через интерфейс;
 - авторизация по телефону действующего сотрудника;
 - загрузка всех контактов с пагинацией по 100 записей;
+- показ только контактов, связанных с реальными личными чатами;
 - отдельный поиск по имени и полному номеру либо его части по всему списку;
 - сортировка контактов: сначала новые, от А до Я и от Я до А;
 - фильтрация контактов по мессенджерам;
@@ -98,19 +100,26 @@ WAZZUP_PARTNER_PASSWORD=
 WAZZUP_OAUTH_REDIRECT_URI=http://127.0.0.1
 WAZZUP_TOKEN_ENCRYPTION_KEY=
 WAZZUP_WEBHOOK_URL=
+WAZZUP_WEBHOOK_SECRET=
 WAZZUP_SYNC_ENABLED=false
+SESSION_COOKIE_SECURE=false
 ```
 
 `WAZZUP_TOKEN_ENCRYPTION_KEY` должен быть длинной случайной строкой. Он
-используется для шифрования OAuth-токенов в SQLite и не должен меняться после
-подключения.
+используется для шифрования API-ключа v3 и OAuth-токенов в SQLite и не должен
+меняться после подключения. Сгенерировать ключ и секрет webhook можно так:
+
+```bash
+openssl rand -hex 32
+```
 
 ```bash
 docker compose up -d --build
 ```
 
 Открыть `http://localhost:8080`, указать пользовательский API-ключ v3, войти по
-телефону сотрудника и подключить технический API в настройках.
+телефону сотрудника и подключить технический API в настройках. После первичной
+настройки изменить API-ключ можно только в авторизованной сессии сотрудника.
 
 ```bash
 docker compose ps
@@ -141,7 +150,7 @@ WAZZUP_OAUTH_REDIRECT_URI=http://127.0.0.1
 Для сервера следует зарегистрировать публичный HTTPS callback, например:
 
 ```dotenv
-WAZZUP_OAUTH_REDIRECT_URI=https://contacts.example.ru
+WAZZUP_OAUTH_REDIRECT_URI=https://contacts.example.ru/api/partner/oauth/callback
 ```
 
 Frontend принимает `code` и `state`, backend проверяет `state`, обменивает код
@@ -154,12 +163,18 @@ Frontend принимает `code` и `state`, backend проверяет `state
 
 ```dotenv
 WAZZUP_WEBHOOK_URL=https://contacts.example.ru/api/partner/webhook
+WAZZUP_WEBHOOK_SECRET=<случайная строка из openssl rand -hex 32>
 WAZZUP_SYNC_ENABLED=true
+SESSION_COOKIE_SECURE=true
 ```
 
 Backend создаёт недостающие подписки `message.add` и
 `messages_dump.status_update`. Локальный `127.0.0.1` недоступен серверам Wazzup,
 поэтому рабочим вебхукам требуется публичный домен с HTTPS.
+
+Секрет автоматически добавляется в URL подписки как параметр `token`. Запросы
+без корректного секрета отклоняются, а URL webhook исключён из access-логов
+Nginx, чтобы значение не попадало в журналы.
 
 ## Установка на Ubuntu
 
@@ -211,9 +226,24 @@ sudo ufw enable
 ```
 
 Для production рекомендуется поставить перед приложением Caddy или Nginx,
-включить HTTPS и проксировать домен на `127.0.0.1:8080`.
+включить HTTPS и проксировать домен на `127.0.0.1:8080`. В `.env` при этом нужно
+установить `SESSION_COOKIE_SECURE=true`, а порт приложения не открывать наружу
+в обход HTTPS-прокси.
 
-### 3. Обновление
+### 3. Резервное копирование
+
+В базе находятся настройки, зашифрованные токены и очередь проверки. Перед
+обновлением рекомендуется сохранить SQLite-файл из Docker volume:
+
+```bash
+docker compose stop backend
+docker compose cp backend:/data/wazzup.db ./wazzup-backup.db
+docker compose start backend
+```
+
+Файл резервной копии содержит персональные данные и не должен попадать в Git.
+
+### 4. Обновление
 
 ```bash
 cd /opt/wazzup-contacts
@@ -232,13 +262,34 @@ docker compose up -d --build
 | `WAZZUP_PARTNER_EMAIL` | Логин партнёрского кабинета |
 | `WAZZUP_PARTNER_PASSWORD` | Пароль партнёрского кабинета |
 | `WAZZUP_OAUTH_REDIRECT_URI` | Зарегистрированный OAuth redirect URI |
-| `WAZZUP_TOKEN_ENCRYPTION_KEY` | Ключ шифрования OAuth-токенов |
+| `WAZZUP_TOKEN_ENCRYPTION_KEY` | Ключ шифрования API-ключа и OAuth-токенов |
 | `WAZZUP_WEBHOOK_URL` | Публичный endpoint для вебхуков |
+| `WAZZUP_WEBHOOK_SECRET` | Случайный секрет проверки входящих webhook |
 | `WAZZUP_SYNC_ENABLED` | Включение фоновой синхронизации |
+| `SESSION_COOKIE_SECURE` | Передача cookie сессии только по HTTPS |
 | `DB_URL` | JDBC URL SQLite для backend |
 | `SERVER_PORT` | Внутренний порт backend |
 
-Пользовательский API-ключ v3 задаётся через интерфейс и хранится в SQLite.
+Пользовательский API-ключ v3 задаётся через интерфейс и хранится в SQLite в
+зашифрованном виде.
+
+## Безопасность production
+
+- изменяющие запросы авторизованной части защищены CSRF-токеном; публичный
+  вход сотрудника не зависит от предварительно созданной сессии;
+- cookie сессии имеет `HttpOnly`, `SameSite=Lax` и в production — `Secure`;
+- Nginx ограничивает размер входящего запроса;
+- API-ключ v3, access token и refresh token шифруются AES-GCM;
+- OAuth использует `state` и PKCE S256;
+- webhook принимает события только с настроенным секретом и обрабатывает их
+  асинхронно с защитой от повторов по `meta.idempotency_key`;
+- внешние HTTP-запросы имеют таймауты, а CSV-выгрузка ограничена 100 МБ;
+- frontend отправляет CSP, `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy` и `Permissions-Policy`.
+
+Авторизация по одному номеру телефона реализована строго по исходному ТЗ, но
+не заменяет полноценную многофакторную аутентификацию. Поэтому production-доступ
+следует дополнительно ограничить корпоративной сетью, VPN или внешним SSO.
 
 ## Локальная разработка
 
@@ -265,7 +316,8 @@ backend.
 | Метод и путь | Назначение | Доступ |
 |---|---|---|
 | `GET /api/health` | Проверка backend | Публичный |
-| `PUT /api/settings/api-key` | Сохранение API-ключа v3 | Публичный |
+| `GET /api/auth/csrf` | Получение CSRF-токена | Публичный |
+| `PUT /api/settings/api-key` | Сохранение API-ключа v3 | Первичная настройка или сессия |
 | `POST /api/auth/login` | Вход сотрудника | Публичный |
 | `POST /api/auth/logout` | Выход | Сессия |
 | `GET /api/contacts?name=&phone=` | Контакты и поиск | Сессия |

@@ -10,5 +10,6 @@ public record PendingContactResponse(
         String username,
         String phone,
         String source,
-        Instant updatedAt
+        Instant updatedAt,
+        Instant lastActivityAt
 ) {}

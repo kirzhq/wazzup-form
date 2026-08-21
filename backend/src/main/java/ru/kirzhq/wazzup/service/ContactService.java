@@ -49,7 +49,9 @@ public class ContactService {
             String name,
             String phone
     ) {
-        List<WazzupContact> allContacts = getAllContacts();
+        List<WazzupContact> allContacts = getAllContacts().stream()
+                .filter(this::hasSupportedChat)
+                .toList();
 
         if (!StringUtils.hasText(name) && !StringUtils.hasText(phone)) {
             return new WazzupContactsResponse(
@@ -77,8 +79,16 @@ public class ContactService {
         String name = request.name().trim();
         String phone = normalizePhone(request.phone());
         String chatType = normalizeChatType(request.chatType());
+        String initialMessage = request.message() == null
+                ? ""
+                : request.message().trim();
 
         validatePhone(phone);
+        if (!StringUtils.hasText(initialMessage)) {
+            throw new IllegalArgumentException(
+                    "Без первого сообщения создать контакт невозможно"
+            );
+        }
         if (!StringUtils.hasText(responsibleUserId)) {
             throw new IllegalArgumentException("Не указан ответственный сотрудник");
         }
@@ -90,7 +100,8 @@ public class ContactService {
 
         WazzupChannel channel = findActiveChannel(chatType);
         SendMessageResponse sent = sendInitialMessage(
-                chatType, phone, responsibleUserId.trim(), channel
+                chatType, phone, responsibleUserId.trim(), channel,
+                initialMessage
         );
         boolean usePhone = "telegram".equals(chatType) || "max".equals(chatType);
         WazzupContactData contactData = new WazzupContactData(
@@ -123,7 +134,8 @@ public class ContactService {
         boolean usePhone = "telegram".equals(chatType) || "max".equals(chatType);
 
         SendMessageResponse sent = sendInitialMessage(
-                chatType, phone, responsibleUserId, channel
+                chatType, phone, responsibleUserId, channel,
+                INITIAL_MESSAGE
         );
 
         WazzupContact updated = new WazzupContact(
@@ -146,7 +158,8 @@ public class ContactService {
             String chatType,
             String phone,
             String responsibleUserId,
-            WazzupChannel channel
+            WazzupChannel channel,
+            String message
     ) {
         boolean usePhone = "telegram".equals(chatType) || "max".equals(chatType);
         return wazzupApiClient.sendMessage(new SendMessageRequest(
@@ -154,7 +167,7 @@ public class ContactService {
                 chatType,
                 usePhone ? null : phone,
                 usePhone ? phone : null,
-                INITIAL_MESSAGE,
+                message,
                 responsibleUserId
         ));
     }
@@ -268,6 +281,17 @@ public class ContactService {
                                 || matchesPhone(contact, normalizedPhone))
                 )
                 .toList();
+    }
+
+    private boolean hasSupportedChat(WazzupContact contact) {
+        if (contact == null || contact.contactData() == null) return false;
+        return contact.contactData().stream()
+                .anyMatch(data -> data != null
+                        && StringUtils.hasText(data.chatType())
+                        && PHONE_CHAT_TYPES.contains(
+                        data.chatType().trim().toLowerCase(Locale.ROOT)
+                )
+                        && StringUtils.hasText(data.chatId()));
     }
 
     private boolean matchesName(
@@ -444,6 +468,7 @@ public class ContactService {
         }
 
         String normalizedContactId = contactId.trim();
+        validateContactId(normalizedContactId);
         String newName = request.name().trim();
 
         WazzupContact existingContact = findContactById(
@@ -470,7 +495,9 @@ public class ContactService {
             );
         }
 
-        wazzupApiClient.deleteContact(contactId.trim());
+        String normalizedContactId = contactId.trim();
+        validateContactId(normalizedContactId);
+        wazzupApiClient.deleteContact(normalizedContactId);
     }
 
     public WazzupContact updateContact(
@@ -483,6 +510,8 @@ public class ContactService {
                     "ID контакта не должен быть пустым"
             );
         }
+
+        validateContactId(contactId.trim());
 
         String phone = normalizePhone(request.phone());
         String chatType = normalizeChatType(request.chatType());
@@ -527,6 +556,12 @@ public class ContactService {
             return wazzupApiClient.getContactById(contactId);
         } catch (WazzupApiException exception) {
             throw new ContactNotFoundException(contactId);
+        }
+    }
+
+    private void validateContactId(String contactId) {
+        if (contactId.length() > 64) {
+            throw new IllegalArgumentException("ID контакта не должен превышать 64 символа");
         }
     }
 

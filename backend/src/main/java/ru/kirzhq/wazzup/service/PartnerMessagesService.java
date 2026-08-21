@@ -9,11 +9,14 @@ import org.springframework.web.client.RestClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.kirzhq.wazzup.config.WazzupPartnerProperties;
+import ru.kirzhq.wazzup.client.WazzupRestClientFactory;
 import ru.kirzhq.wazzup.entity.AppSettings;
 import ru.kirzhq.wazzup.exception.WazzupApiException;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -27,13 +30,16 @@ import java.util.Set;
 public class PartnerMessagesService {
     private static final Logger log = LoggerFactory.getLogger(PartnerMessagesService.class);
     private static final Instant INITIAL_SYNC_START = Instant.parse("2020-01-01T00:00:00Z");
+    private static final int MAX_EXPORT_SIZE_BYTES = 100 * 1024 * 1024;
     private final PartnerOauthService oauthService;
     private final SettingsService settingsService;
     private final PendingContactService pendingContactService;
     private final ContactService contactService;
     private final WazzupPartnerProperties properties;
-    private final RestClient restClient = RestClient.builder()
-            .baseUrl("https://tech.wazzup24.com/v2").build();
+    private final RestClient restClient = WazzupRestClientFactory.create(
+            "https://tech.wazzup24.com/v2"
+    );
+    private final RestClient downloadClient = WazzupRestClientFactory.create(null);
 
     public PartnerMessagesService(PartnerOauthService oauthService,
                                   SettingsService settingsService,
@@ -94,14 +100,44 @@ public class PartnerMessagesService {
     }
 
     private byte[] download(String url) {
-        byte[] bytes = RestClient.create().get().uri(url).retrieve().body(byte[].class);
-        if (bytes == null) throw new WazzupApiException("Wazzup вернул пустую выгрузку");
-        return bytes;
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException exception) {
+            throw new WazzupApiException("Wazzup вернул некорректную ссылку на выгрузку", exception);
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+            throw new WazzupApiException("Ссылка на выгрузку Wazzup должна использовать HTTPS");
+        }
+
+        return downloadClient.get().uri(uri).exchange((request, response) -> {
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new WazzupApiException(
+                        "Не удалось скачать выгрузку Wazzup: HTTP "
+                                + response.getStatusCode().value()
+                );
+            }
+            long contentLength = response.getHeaders().getContentLength();
+            if (contentLength > MAX_EXPORT_SIZE_BYTES) {
+                throw new WazzupApiException("Выгрузка Wazzup превышает 100 МБ");
+            }
+            try (InputStream input = response.getBody()) {
+                byte[] bytes = input.readNBytes(MAX_EXPORT_SIZE_BYTES + 1);
+                if (bytes.length == 0) {
+                    throw new WazzupApiException("Wazzup вернул пустую выгрузку");
+                }
+                if (bytes.length > MAX_EXPORT_SIZE_BYTES) {
+                    throw new WazzupApiException("Выгрузка Wazzup превышает 100 МБ");
+                }
+                return bytes;
+            }
+        });
     }
 
     private int importCsv(byte[] bytes) throws Exception {
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
         Map<String, TimedCandidate> candidates = new LinkedHashMap<>();
+        Map<String, TimedProfile> inboundProfiles = new LinkedHashMap<>();
         try (InputStreamReader reader = new InputStreamReader(
                 new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
             var parser = format.parse(reader);
@@ -114,37 +150,61 @@ public class PartnerMessagesService {
                 String transport = field(record, "transport", "chat_type");
                 String chatId = field(record, "chat_id");
                 if (transport == null || chatId == null) continue;
-                String normalizedTransport = transport.trim().toLowerCase(Locale.ROOT);
+                String normalizedTransport = normalizeTransport(transport);
                 if (!("max".equals(normalizedTransport)
-                        || "tgapi".equals(normalizedTransport)
                         || "telegram".equals(normalizedTransport)
                         || "whatsapp".equals(normalizedTransport))) continue;
-                String key = normalizedTransport + ":" + chatId;
+                String normalizedChatId = chatId.trim();
+                if (!isPersonalChatId(normalizedTransport, normalizedChatId)) continue;
+                String key = normalizedTransport + ":" + normalizedChatId;
                 String username = field(record, "user_username", "username");
                 ContactService.ChatContactCandidate next = new ContactService.ChatContactCandidate(
-                        transport,
-                        field(record, "chat_id", "recipient_chat_id", "recipient.chat_id"),
-                        username,
-                        field(record, "user_phone", "phone"),
+                        normalizedTransport,
+                        normalizedChatId,
+                        null,
+                        null,
                         null);
                 Instant timestamp = parseTimestamp(field(record, "datetime", "timestamp"));
                 TimedCandidate current = candidates.get(key);
                 if (current == null || timestamp.isAfter(current.timestamp())) {
                     candidates.put(key, new TimedCandidate(timestamp, next));
                 }
+                if (inbound) {
+                    TimedProfile profile = new TimedProfile(
+                            timestamp,
+                            username,
+                            field(record, "user_phone", "phone")
+                    );
+                    TimedProfile currentProfile = inboundProfiles.get(key);
+                    if (currentProfile == null || timestamp.isAfter(currentProfile.timestamp())) {
+                        inboundProfiles.put(key, profile);
+                    }
+                }
             }
         }
         Set<String> existingChatKeys = contactService.getExistingChatKeys();
         List<ContactService.ChatContactCandidate> missing = candidates.values().stream()
-                .map(TimedCandidate::candidate)
+                .map(timed -> {
+                    ContactService.ChatContactCandidate candidate = timed.candidate();
+                    String key = normalizeTransport(candidate.chatType()) + ":" + candidate.chatId();
+                    TimedProfile profile = inboundProfiles.get(key);
+                    return new ContactService.ChatContactCandidate(
+                            candidate.chatType(), candidate.chatId(),
+                            profile == null ? null : profile.username(),
+                            profile == null ? null : profile.phone(), null
+                    );
+                })
                 .filter(candidate -> !existingChatKeys.contains(
                         normalizeTransport(candidate.chatType()) + ":" + candidate.chatId()
                 ))
                 .toList();
-        missing.forEach(candidate -> pendingContactService.remember(
-                candidate.chatType(), candidate.chatId(), null,
-                candidate.username(), candidate.phone(), "MESSAGES_DUMP"
-        ));
+        missing.forEach(candidate -> {
+            String key = normalizeTransport(candidate.chatType()) + ":" + candidate.chatId();
+            pendingContactService.rememberFromDump(
+                    candidate.chatType(), candidate.chatId(), candidate.username(), candidate.phone(),
+                    candidates.get(key).timestamp()
+            );
+        });
         return missing.size();
     }
 
@@ -160,6 +220,12 @@ public class PartnerMessagesService {
     private String normalizeTransport(String value) {
         String normalized = value.trim().toLowerCase(Locale.ROOT);
         return "tgapi".equals(normalized) ? "telegram" : normalized;
+    }
+
+    private boolean isPersonalChatId(String chatType, String chatId) {
+        if (!chatId.matches("\\d+")) return false;
+        if ("whatsapp".equals(chatType)) return chatId.length() >= 10 && chatId.length() <= 15;
+        return chatId.length() <= 20;
     }
 
     public void requestSynchronization() {
@@ -183,4 +249,6 @@ public class PartnerMessagesService {
             Instant timestamp,
             ContactService.ChatContactCandidate candidate
     ) {}
+
+    private record TimedProfile(Instant timestamp, String username, String phone) {}
 }

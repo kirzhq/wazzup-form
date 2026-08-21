@@ -23,9 +23,9 @@ public class WazzupApiClient {
     public WazzupApiClient(SettingsService settingsService) {
         this.settingsService = settingsService;
 
-        this.restClient = RestClient.builder()
-                .baseUrl("https://api.wazzup24.com/v3")
-                .build();
+        this.restClient = WazzupRestClientFactory.create(
+                "https://api.wazzup24.com/v3"
+        );
     }
 
     private String getBearerToken() {

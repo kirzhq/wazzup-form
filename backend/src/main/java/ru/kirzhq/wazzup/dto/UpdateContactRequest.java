@@ -12,11 +12,14 @@ public record UpdateContactRequest(
         )
         String name,
 
+        @Size(max = 40, message = "Номер телефона слишком длинный")
         String phone,
 
         @NotBlank(message = "Социальная сеть обязательна")
+        @Size(max = 20, message = "Тип мессенджера слишком длинный")
         String chatType,
 
+        @Size(max = 200, message = "Идентификатор чата слишком длинный")
         String chatId
 ) {
 }
