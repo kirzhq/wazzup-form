@@ -263,7 +263,7 @@ export function ContactsPage() {
       setShowCreateForm(false)
       await loadContacts(activeSearch)
       setNotice(
-        'Контакт создан в Wazzup. Новый диалог появится после первого сообщения или входящего обращения.',
+        'Контакт и чат созданы в Wazzup. Первое сообщение «Здравствуйте!» отправлено.',
       )
     } catch (requestError) {
       setError(
@@ -819,8 +819,8 @@ export function ContactsPage() {
               </div>
 
               <Alert variant="info">
-                Кнопка создаёт карточку контакта. Сам диалог появится в Wazzup
-                после первого входящего или отправленного сообщения.
+                После создания контакта приложение отправит первое сообщение
+                «Здравствуйте!», чтобы диалог появился в Wazzup.
               </Alert>
 
               <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import ru.kirzhq.wazzup.client.WazzupApiClient;
 import ru.kirzhq.wazzup.dto.CreateContactRequest;
+import ru.kirzhq.wazzup.dto.SendMessageRequest;
+import ru.kirzhq.wazzup.dto.SendMessageResponse;
+import ru.kirzhq.wazzup.dto.WazzupChannel;
 import ru.kirzhq.wazzup.dto.WazzupContact;
 import ru.kirzhq.wazzup.dto.WazzupContactData;
 import ru.kirzhq.wazzup.dto.WazzupContactsResponse;
@@ -22,6 +25,7 @@ import java.util.UUID;
 
 @Service
 public class ContactService {
+    private static final String INITIAL_MESSAGE = "Здравствуйте!";
     private static final int CONTACT_READ_ATTEMPTS = 3;
     private static final long CONTACT_READ_DELAY_MS = 200;
     private static final int PAGE_SIZE = 100;
@@ -84,9 +88,16 @@ public class ContactService {
                 UUID.randomUUID().toString().substring(0, 12)
         );
 
-        WazzupContactData contactData = createContactData(
+        WazzupChannel channel = findActiveChannel(chatType);
+        SendMessageResponse sent = sendInitialMessage(
+                chatType, phone, responsibleUserId.trim(), channel
+        );
+        boolean usePhone = "telegram".equals(chatType) || "max".equals(chatType);
+        WazzupContactData contactData = new WazzupContactData(
                 chatType,
-                phone
+                sent.chatId(),
+                null,
+                usePhone ? phone : null
         );
 
         WazzupContact contact = new WazzupContact(
@@ -98,8 +109,96 @@ public class ContactService {
         );
 
         wazzupApiClient.saveContacts(List.of(contact));
-
         return getCreatedContact(contactId);
+    }
+
+    private WazzupContact startChat(
+            WazzupContact contact,
+            String phone,
+            String responsibleUserId,
+            WazzupChannel channel
+    ) {
+        WazzupContactData data = contact.contactData().getFirst();
+        String chatType = data.chatType();
+        boolean usePhone = "telegram".equals(chatType) || "max".equals(chatType);
+
+        SendMessageResponse sent = sendInitialMessage(
+                chatType, phone, responsibleUserId, channel
+        );
+
+        WazzupContact updated = new WazzupContact(
+                contact.id(),
+                responsibleUserId,
+                contact.name(),
+                List.of(new WazzupContactData(
+                        chatType,
+                        sent.chatId(),
+                        data.username(),
+                        usePhone ? phone : data.phone()
+                )),
+                contact.uri()
+        );
+        wazzupApiClient.saveContacts(List.of(updated));
+        return getCreatedContact(contact.id());
+    }
+
+    private SendMessageResponse sendInitialMessage(
+            String chatType,
+            String phone,
+            String responsibleUserId,
+            WazzupChannel channel
+    ) {
+        boolean usePhone = "telegram".equals(chatType) || "max".equals(chatType);
+        return wazzupApiClient.sendMessage(new SendMessageRequest(
+                channel.channelId(),
+                chatType,
+                usePhone ? null : phone,
+                usePhone ? phone : null,
+                INITIAL_MESSAGE,
+                responsibleUserId
+        ));
+    }
+
+    public WazzupContact startChat(String contactId, String responsibleUserId) {
+        WazzupContact contact = findContactById(contactId);
+        if (contact.contactData() == null || contact.contactData().isEmpty()) {
+            throw new IllegalArgumentException("У контакта нет данных мессенджера");
+        }
+        WazzupContactData data = contact.contactData().getFirst();
+        String phone = normalizePhone(data.phone());
+        if (phone.isBlank() && PHONE_CHAT_TYPES.contains(data.chatType())) {
+            phone = normalizePhone(data.chatId());
+        }
+        validatePhone(phone);
+        return startChat(
+                contact,
+                phone,
+                responsibleUserId,
+                findActiveChannel(data.chatType())
+        );
+    }
+
+    private WazzupChannel findActiveChannel(String chatType) {
+        Set<String> transports = switch (chatType) {
+            case "whatsapp" -> Set.of("whatsapp", "wapi");
+            case "telegram" -> Set.of("tgapi");
+            case "max" -> Set.of("max");
+            case "viber" -> Set.of("viber");
+            default -> Set.of(chatType);
+        };
+        WazzupChannel[] channels = wazzupApiClient.getChannels();
+        if (channels != null) {
+            for (WazzupChannel channel : channels) {
+                if (channel != null
+                        && "active".equalsIgnoreCase(channel.state())
+                        && transports.contains(channel.transport())) {
+                    return channel;
+                }
+            }
+        }
+        throw new WazzupApiException(
+                "Контакт сохранён, но активный канал " + chatType + " не найден"
+        );
     }
 
     private List<WazzupContact> getAllContacts() {

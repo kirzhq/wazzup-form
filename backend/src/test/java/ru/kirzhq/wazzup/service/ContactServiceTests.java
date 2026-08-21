@@ -7,6 +7,8 @@ import ru.kirzhq.wazzup.dto.WazzupContactData;
 import ru.kirzhq.wazzup.dto.WazzupContactsResponse;
 import ru.kirzhq.wazzup.dto.UpdateContactRequest;
 import ru.kirzhq.wazzup.dto.CreateContactRequest;
+import ru.kirzhq.wazzup.dto.SendMessageResponse;
+import ru.kirzhq.wazzup.dto.WazzupChannel;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -17,6 +19,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.ArgumentMatchers.anyString;
 
 class ContactServiceTests {
@@ -183,6 +186,11 @@ class ContactServiceTests {
 
     @Test
     void createsWhatsappContactWithResponsibleUserAndPhoneChatId() {
+        when(client.getChannels()).thenReturn(new WazzupChannel[]{
+                new WazzupChannel("channel-1", "whatsapp", "79990000000", "active")
+        });
+        when(client.sendMessage(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new SendMessageResponse("message-1", "79991234567"));
         when(client.getContactById(anyString())).thenAnswer(invocation ->
                 new WazzupContact(
                         invocation.getArgument(0), "user-1", "Новый клиент",
@@ -196,7 +204,7 @@ class ContactServiceTests {
         ), "user-1");
 
         assertThat(created.name()).isEqualTo("Новый клиент");
-        verify(client).saveContacts(argThat(contacts -> {
+        verify(client, atLeastOnce()).saveContacts(argThat(contacts -> {
             WazzupContact contact = contacts.getFirst();
             return contact.responsibleUserId().equals("user-1")
                     && contact.contactData().getFirst().chatType().equals("whatsapp")

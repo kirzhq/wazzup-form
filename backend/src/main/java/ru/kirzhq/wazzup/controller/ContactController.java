@@ -72,4 +72,12 @@ public class ContactController {
     public void deleteContact(@PathVariable String contactId) {
         contactService.deleteContact(contactId);
     }
+
+    @PostMapping("/{contactId}/start-chat")
+    public WazzupContact startChat(
+            @PathVariable String contactId,
+            Principal principal
+    ) {
+        return contactService.startChat(contactId, principal.getName());
+    }
 }

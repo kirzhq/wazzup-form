@@ -3,6 +3,9 @@ package ru.kirzhq.wazzup.client;
 import java.util.List;
 
 import ru.kirzhq.wazzup.dto.WazzupContact;
+import ru.kirzhq.wazzup.dto.SendMessageRequest;
+import ru.kirzhq.wazzup.dto.SendMessageResponse;
+import ru.kirzhq.wazzup.dto.WazzupChannel;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -96,6 +99,40 @@ public class WazzupApiClient {
         } catch (RestClientException exception) {
             throw new WazzupApiException(
                     "Не удалось сохранить контакт в Wazzup",
+                    exception
+            );
+        }
+    }
+
+    public WazzupChannel[] getChannels() {
+        try {
+            return restClient.get()
+                    .uri("/channels")
+                    .header("Authorization", getBearerToken())
+                    .retrieve()
+                    .body(WazzupChannel[].class);
+        } catch (RestClientException exception) {
+            throw new WazzupApiException("Не удалось получить каналы Wazzup", exception);
+        }
+    }
+
+    public SendMessageResponse sendMessage(SendMessageRequest request) {
+        try {
+            SendMessageResponse response = restClient.post()
+                    .uri("/message")
+                    .header("Authorization", getBearerToken())
+                    .body(request)
+                    .retrieve()
+                    .body(SendMessageResponse.class);
+            if (response == null || response.chatId() == null) {
+                throw new WazzupApiException(
+                        "Wazzup не вернул идентификатор созданного чата"
+                );
+            }
+            return response;
+        } catch (RestClientException exception) {
+            throw new WazzupApiException(
+                    "Контакт сохранён, но не удалось отправить первое сообщение",
                     exception
             );
         }
